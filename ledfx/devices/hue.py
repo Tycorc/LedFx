@@ -118,21 +118,22 @@ class HueDevice(NetworkedDevice):
                 "Your Hue Bridge has an outdated Firmware installed. Update it using the Hue App."
             )
 
-    def _hue_request(self, method, api_endpoint, data=None, ssl=False):
-        url = f"{'https' if ssl else 'http'}://{self._config['ip_address']}/{api_endpoint}"
+    def _hue_request(self, method, api_endpoint, data=None):
+        # The Hue Bridge Pro answers plain HTTP with a 301 to HTTPS, which turns the registration POST into a GET.
+        url = f"https://{self._config['ip_address']}/{api_endpoint}"
 
         headers = {"hue-application-key": self._config.get("username")}
 
-        # SSL is somehow necessary for some Hue requests but we need to skip the verification since there are no valid certs
+        # The bridge certificate is signed by the Hue root CA, not a public one, so verification is skipped
         response = getattr(requests, method.lower())(
-            url, json=data, verify=not ssl, headers=headers
+            url, json=data, verify=False, headers=headers
         )
 
         return response.json(), response.headers
 
     def _entertainment_groups(self):
         response, _ = self._hue_request(
-            "GET", "/clip/v2/resource/entertainment_configuration", ssl=True
+            "GET", "/clip/v2/resource/entertainment_configuration"
         )
 
         all_groups = response["data"]
@@ -149,7 +150,6 @@ class HueDevice(NetworkedDevice):
         response, _ = self._hue_request(
             "GET",
             f"/clip/v2/resource/entertainment_configuration/{entertainment_id}",
-            ssl=True,
         )
         lights = dict()
         for channel in response["data"][0]["channels"]:
@@ -171,7 +171,7 @@ class HueDevice(NetworkedDevice):
         return lights
 
     def _get_application_id(self):
-        _, headers = self._hue_request("GET", "/auth/v1", ssl=True)
+        _, headers = self._hue_request("GET", "/auth/v1")
         return headers.get("hue-application-id")
 
     def activate(self):
@@ -181,7 +181,6 @@ class HueDevice(NetworkedDevice):
             "PUT",
             f"/clip/v2/resource/entertainment_configuration/{self._config['entertainment_id']}",
             request_data,
-            ssl=True,
         )
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -224,7 +223,6 @@ class HueDevice(NetworkedDevice):
             "PUT",
             f"/clip/v2/resource/entertainment_configuration/{self._config['entertainment_id']}",
             request_data,
-            ssl=True,
         )
 
         super().deactivate()
