@@ -3452,4 +3452,75 @@ ledfx_presets = {
             "name": "rainbow explosion",
         },
     },
+    "rave": {
+        "club": {
+            "config": {
+                "fade": 0.35,
+                "flash_chance": 0.1,
+                "gradient": "linear-gradient(90deg, rgb(255, 0, 0) 0%, rgb(255, 0, 178) 50%, rgb(0, 0, 255) 100%)",
+                "mode": "random",
+                "steps_per_beat": "1",
+                "timer_bpm": 128,
+                "trigger": "Beat",
+            },
+            "name": "Club",
+        },
+        "rainbow-party": {
+            "config": {
+                "fade": 0.0,
+                "flash_chance": 0.0,
+                "gradient": "linear-gradient(90deg, rgb(255, 0, 0) 0%, rgb(255, 120, 0) 14%, rgb(255, 200, 0) 28%, rgb(0, 255, 0) 42%, rgb(0, 199, 140) 56%, rgb(0, 0, 255) 70%, rgb(128, 0, 128) 84%, rgb(255, 0, 178) 98%)",
+                "mode": "random",
+                "steps_per_beat": "2",
+                "timer_bpm": 128,
+                "trigger": "Beat",
+            },
+            "name": "Rainbow Party",
+        },
+        "strobe-drop": {
+            "config": {
+                "fade": 0.0,
+                "mode": "strobe",
+                "steps_per_beat": "1",
+                "strobe_color": "#FFFFFF",
+                "strobe_flashes": 4,
+                "timer_bpm": 128,
+                "trigger": "Beat",
+            },
+            "name": "Strobe Drop",
+        },
+        "police": {
+            "config": {
+                "fade": 0.0,
+                "gradient": "linear-gradient(90deg, #ff0000 0%, #ff0000 50%, #0000ff 50%, #0000ff 100%)",
+                "mode": "alternate",
+                "steps_per_beat": "2",
+                "timer_bpm": 150,
+                "trigger": "Timer",
+            },
+            "name": "Police",
+        },
+        "round-the-room": {
+            "config": {
+                "fade": 0.6,
+                "gradient": "linear-gradient(90deg, rgb(0, 255, 255) 0%, rgb(0, 0, 255) 50%, rgb(255, 0, 178) 100%)",
+                "mode": "chase",
+                "steps_per_beat": "2",
+                "timer_bpm": 128,
+                "trigger": "Beat",
+            },
+            "name": "Round The Room",
+        },
+        "slow-wash": {
+            "config": {
+                "fade": 0.0,
+                "gradient": "linear-gradient(90deg, rgb(255, 0, 0) 0%, rgb(255, 120, 0) 14%, rgb(255, 200, 0) 28%, rgb(0, 255, 0) 42%, rgb(0, 199, 140) 56%, rgb(0, 0, 255) 70%, rgb(128, 0, 128) 84%, rgb(255, 0, 178) 98%)",
+                "mode": "wash",
+                "steps_per_beat": "1/2",
+                "timer_bpm": 60,
+                "trigger": "Timer",
+            },
+            "name": "Slow Wash",
+        },
+    },
 }
