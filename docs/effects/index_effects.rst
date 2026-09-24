@@ -32,4 +32,5 @@ Effects
    :maxdepth: 2
 
    simple/filter
+   simple/rave
    simple/spotlight
