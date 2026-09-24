@@ -14,7 +14,7 @@ The steps that drive the pattern come from the beat tracker, from bass hits, fro
 |-------------|---------------------------------------------------------------------------|
 | `random`    | Every lamp picks a new colour from the palette, independently.            |
 | `wash`      | All lamps snap to the same new colour.                                    |
-| `chase`     | One lamp is lit at a time, and it moves to the next lamp.                 |
+| `chase`     | One lamp is lit at a time, and it moves to the next lamp. On a Hue zone, set the device's Light order to `Around the room` so it travels around the walls. |
 | `alternate` | Even and odd lamps show two colours from opposite ends of the palette and swap them. With a red / blue palette this is the classic police pattern. |
 | `strobe`    | All lamps flash the strobe colour a few times per step.                   |
 
