@@ -68,6 +68,7 @@ class HueDevice(NetworkedDevice):
         super().__init__(ledfx, config)
         self._device_type = "Hue"
         self._channel_ids = None
+        self._stream_started = False
         if not MBEDTLS_AVAILABLE:
             raise Exception(
                 "You need to install the python-mbedtls package for Hue to work."
@@ -130,7 +131,11 @@ class HueDevice(NetworkedDevice):
             response, _ = self._hue_request(
                 "GET", f"api/{self._config['username']}"
             )
-            if "error" in response[0]:
+            # A successful v1 GET returns an object; failures are a list of
+            # error objects. Indexing a successful response raises KeyError.
+            if isinstance(response, list) and any(
+                "error" in entry for entry in response
+            ):
                 # Credentials are no longer valid - need Bridge Link Button to be pressed and LedFx to be restarted.
                 # We delete the invalid credentials here - after a restart a fresh registration will be tried.
                 self.update_config({"username": None, "clientkey": None})
@@ -347,6 +352,11 @@ class HueDevice(NetworkedDevice):
         return self._response_errors(response)
 
     def activate(self):
+        # flush() can reconnect after a send failure. Release the old socket
+        # and stream before replacing them.
+        if self._sock is not None or self._stream_started:
+            self.deactivate()
+
         max_streams = self._config.get("max_streams", 1)
         busy = self._streams_in_use()
         if len(busy) >= max_streams:
@@ -380,15 +390,25 @@ class HueDevice(NetworkedDevice):
             self.set_offline()
             return
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(5)
-        sock.setblocking(False)
-        self._sock = self._dtls_client_context.wrap_socket(
-            sock, self._config["ip_address"]
-        )
-        self._sock.connect(
-            (self._config["ip_address"], self._config["udp_port"])
-        )
+        # Only an accepted start gives this device a stream to stop. In
+        # particular, set_offline() calls deactivate() after a refusal too.
+        self._stream_started = True
+        try:
+            self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self._sock.settimeout(5)
+            self._sock.setblocking(False)
+            self._sock = self._dtls_client_context.wrap_socket(
+                self._sock, self._config["ip_address"]
+            )
+            self._sock.connect(
+                (self._config["ip_address"], self._config["udp_port"])
+            )
+        except Exception as e:
+            _LOGGER.warning(
+                "%s: could not open the Hue stream socket: %s", self.name, e
+            )
+            self.set_offline()
+            return
 
         # Since UDP packets can get lost - we need to try handshaking a couple of times
         handshake_success = False
@@ -419,7 +439,8 @@ class HueDevice(NetworkedDevice):
             self._sock.close()
             self._sock = None
 
-        if "entertainment_id" in self._config:
+        if self._stream_started:
+            self._stream_started = False
             try:
                 errors = self._stream_request("stop")
                 if errors:
