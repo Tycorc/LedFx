@@ -19,6 +19,7 @@ from ledfx.effects.utils.layout import (
     normalise,
     radii,
     resolve_positions,
+    zone_map,
     zone_positions,
 )
 from ledfx.effects.utils.step_trigger import StepTrigger, step_trigger_schema
@@ -241,16 +242,13 @@ class TrueStrobeEffect(AudioReactiveEffect, GradientEffect):
 
     def _build_lamps(self, pixel_count):
         """Map the pixels onto lamps and work out where every lamp stands."""
-        zones = self._config["zones"]
-        if zones <= 0:
-            if pixel_count <= self.AUTO_ZONE_PIXEL_LIMIT:
-                zones = pixel_count
-            else:
-                zones = self.AUTO_ZONE_COUNT
-        zones = max(1, min(zones, pixel_count))
-        self._zone_count = zones
-        self._zone_of_pixel = (np.arange(pixel_count) * zones) // pixel_count
-        n = zones
+        self._zone_count, self._zone_of_pixel = zone_map(
+            pixel_count,
+            self._config["zones"],
+            self.AUTO_ZONE_PIXEL_LIMIT,
+            self.AUTO_ZONE_COUNT,
+        )
+        n = self._zone_count
 
         pixel_positions, source = resolve_positions(
             self.layout, pixel_count, self._virtual, self._ledfx
@@ -393,9 +391,13 @@ class TrueStrobeEffect(AudioReactiveEffect, GradientEffect):
             count = max(1, min(n, int(round(self.density * n))))
             lit[self._rng.choice(n, count, replace=False)] = True
         elif spread == "random":
-            lamp = int(self._rng.integers(n - 1))
-            if lamp >= self._last_random:
-                lamp += 1
+            if 0 <= self._last_random < n:
+                # Any lamp but the one of the previous flash
+                lamp = int(self._rng.integers(n - 1))
+                if lamp >= self._last_random:
+                    lamp += 1
+            else:
+                lamp = int(self._rng.integers(n))
             self._last_random = lamp
             lit[lamp] = True
         return lit

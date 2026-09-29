@@ -348,8 +348,14 @@ class HueDevice(NetworkedDevice):
             if ordered and ordered[-1] in chain:
                 if chain.index(ordered[-1]) > 0:
                     chain.reverse()
-            elif ordered and rank.get(chain[-1], 0) < rank.get(chain[0], 0):
-                chain.reverse()
+            elif ordered:
+                # Start at the end that sits nearer, in room order, to
+                # where the previous strip left off
+                previous = rank.get(ordered[-1], 0)
+                if abs(rank.get(chain[-1], 0) - previous) < abs(
+                    rank.get(chain[0], 0) - previous
+                ):
+                    chain.reverse()
             for channel_id in chain:
                 if channel_id not in used:
                     ordered.append(channel_id)

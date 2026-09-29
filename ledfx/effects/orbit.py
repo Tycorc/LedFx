@@ -20,6 +20,8 @@ from ledfx.effects.utils.layout import (
     project,
     radii,
     resolve_positions,
+    synthetic_positions,
+    zone_map,
     zone_positions,
 )
 from ledfx.effects.utils.sections import SectionDetector
@@ -299,19 +301,19 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
 
     def _build_zones(self, pixel_count):
         zones = int(self._config["zones"])
-        if zones <= 0:
-            if pixel_count <= self.AUTO_ZONE_PIXEL_LIMIT:
-                zones = pixel_count
-            elif (
-                self._virtual_rows() > 1
-                and pixel_count <= self.AUTO_MATRIX_PIXEL_LIMIT
-            ):
-                zones = pixel_count
-            else:
-                zones = self.AUTO_ZONE_COUNT
-        zones = max(1, min(zones, pixel_count))
-        self._zone_count = zones
-        self._zone_of_pixel = (np.arange(pixel_count) * zones) // pixel_count
+        if (
+            zones <= 0
+            and self._virtual_rows() > 1
+            and pixel_count <= self.AUTO_MATRIX_PIXEL_LIMIT
+        ):
+            # A matrix keeps one lamp per pixel so the field shows on it
+            zones = pixel_count
+        self._zone_count, self._zone_of_pixel = zone_map(
+            pixel_count,
+            zones,
+            self.AUTO_ZONE_PIXEL_LIMIT,
+            self.AUTO_ZONE_COUNT,
+        )
 
     def _resolve_layout(self):
         """Where every zone stands, in the turning plane and in 3D."""
@@ -325,8 +327,9 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
                     positions, self._zone_of_pixel, self._zone_count
                 )
         else:
-            positions, source = resolve_positions(
-                self.layout, self._zone_count, self._virtual, self._ledfx
+            # A synthetic layout is laid over the zones themselves
+            positions, source = synthetic_positions(
+                self.layout, self._zone_count, self._virtual_rows()
             )
         self._source = source
         self._positions = np.asarray(positions, dtype=float)
@@ -450,10 +453,6 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
             return 1.0 if self._rng.random() < 0.5 else -1.0
         return 1.0
 
-    def _beat_period(self):
-        stepper = self._stepper
-        return max(0.05, stepper.step_interval * stepper.steps_per_beat)
-
     # ---------------------------------------------------------------- steps
 
     def _step(self, now):
@@ -556,7 +555,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
 
     def _advance(self, dt):
         """Move the continuous phase by dt seconds, beat synced."""
-        delta = dt / (self._beat_period() * self.beats_per_turn)
+        delta = dt / (self._stepper.beat_period() * self.beats_per_turn)
         self._phase += self._direction * delta
         self._turn += delta
         if self._turn >= 1.0:

@@ -16,6 +16,7 @@ from ledfx.effects.utils.layout import (
     assign_channels,
     normalise,
     resolve_positions,
+    zone_map,
     zone_positions,
 )
 from ledfx.effects.utils.step_trigger import StepTrigger, step_trigger_schema
@@ -314,16 +315,25 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
     def config_updated(self, config):
         old_pattern = getattr(self, "_applied_pattern", None)
         self._applied_pattern = self._config["pattern"]
-        self.pattern = self._config["pattern"]
-        self.envelope = self._config["envelope"]
-        self.color_mode = self._config["color_mode"]
+        auto_key = (
+            self._config["pattern"],
+            self._config["envelope"],
+            self._config["color_mode"],
+        )
+        # A setting on auto keeps its current choice through unrelated
+        # config changes, the next choice comes with the next auto step
+        repick = getattr(self, "_auto_key", None) != auto_key
+        if repick or getattr(self, "pixels", None) is None:
+            self.pattern, self.envelope, self.color_mode = auto_key
+        self._auto_key = auto_key
         self.grouping = self._config["grouping"]
         self.layout = self._config["layout"]
         self.auto_steps = self._config["auto_steps"]
         self.stages = self._config["stages"]
-        self._energy_filter = self.create_filter(
-            alpha_decay=0.02, alpha_rise=0.1
-        )
+        if getattr(self, "_energy_filter", None) is None:
+            self._energy_filter = self.create_filter(
+                alpha_decay=0.02, alpha_rise=0.1
+            )
         self.color_step = self._config["color_step"]
         self.strobe_flashes = self._config["strobe_flashes"]
         self.flash_length = self._config["flash_length"]
@@ -341,7 +351,8 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         if getattr(self, "_stepper", None) is not None:
             self._stepper.configure(self._config)
         if getattr(self, "pixels", None) is not None:
-            self._auto_pick()
+            if repick:
+                self._auto_pick()
             self._build_zones(self.pixel_count)
             if (
                 len(self._lit_now) != self._zone_count
@@ -413,16 +424,13 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
 
     def _build_zones(self, pixel_count):
         """Map pixels onto lamps, keeping the colours of lamps that survive."""
-        zones = self._config["zones"]
-        if zones <= 0:
-            if pixel_count <= self.AUTO_ZONE_PIXEL_LIMIT:
-                zones = pixel_count
-            else:
-                zones = self.AUTO_ZONE_COUNT
-        zones = max(1, min(zones, pixel_count))
-
-        self._zone_count = zones
-        self._zone_of_pixel = (np.arange(pixel_count) * zones) // pixel_count
+        self._zone_count, self._zone_of_pixel = zone_map(
+            pixel_count,
+            self._config["zones"],
+            self.AUTO_ZONE_PIXEL_LIMIT,
+            self.AUTO_ZONE_COUNT,
+        )
+        zones = self._zone_count
 
         points = np.zeros(zones)
         colors = np.zeros((zones, 3))
@@ -553,6 +561,9 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         n = self._zone_count
         if n == 1:
             return 0
+        if exclude is not None and exclude < 0:
+            # Nothing has been picked yet
+            exclude = None
         pool = np.ones(n, dtype=bool)
         if exclude is not None:
             pool[exclude % n] = False

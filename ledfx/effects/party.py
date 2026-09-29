@@ -8,12 +8,16 @@ import voluptuous as vol
 from ledfx.color import parse_color, validate_color
 from ledfx.effects.audio import AudioReactiveEffect
 from ledfx.effects.gradient import GradientEffect
+from ledfx.effects.utils import band_level
+from ledfx.effects.utils.band_level import band_masks, frequency_key
+from ledfx.effects.utils.flash_limiter import FlashLimiter
 from ledfx.effects.utils.layout import (
     LAYOUTS,
     angles,
     heading_vector,
     project,
     resolve_positions,
+    zone_map,
     zone_positions,
 )
 from ledfx.effects.utils.step_trigger import StepTrigger, step_trigger_schema
@@ -201,20 +205,17 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
     CURVES = ["cut", "linear", "ease in", "ease out", "ease in out"]
     DIRECTIONS = ["forward", "reverse", "alternate", "random"]
     ORDERS = ["Position", "Room", "Heading", "Random"]
-    BANDS = ["Full", "Bass", "Mids", "High"]
+    BANDS = band_level.BANDS
 
     AUTO_ZONE_PIXEL_LIMIT = 32
     AUTO_ZONE_COUNT = 8
-    # A lamp may not rise to bright again within this many seconds
-    FLASH_BRIGHT = 0.55
-    FLASH_INTERVAL = 0.35
     # Shortest time between two burst events
     BURST_INTERVAL = 0.4
     # Audio level smoothing in seconds before the smoothing setting scales it
     LEVEL_ATTACK = 0.03
     LEVEL_RELEASE = 0.22
-    # Band edges in Hz for the reactive levels
-    BAND_EDGES = [(20, 250), (250, 3000), (3000, 9000)]
+    # Band edges in Hz for the reactive levels: bass, mids and high
+    BAND_EDGES = [band_level.BAND_EDGES[name] for name in BANDS[1:]]
     # Reactive depth the gate and burst families use while the setting is 0
     GATE_DEPTH = 0.8
     BURST_DEPTH = 0.6
@@ -374,7 +375,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
         self._fire_origins = {}
         self._spread_cache = {}
         self._band_masks = None
-        self._band_freq_count = 0
+        self._band_freq_key = None
         self._levels = np.zeros(4)  # full, bass, mids, high
         self._last_level_time = now
         self._build_zones(pixel_count)
@@ -409,23 +410,21 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
             self._stepper.configure(self._config)
         if getattr(self, "pixels", None) is not None:
             self._build_zones(self.pixel_count)
-            if len(self._lamp_was_bright) != self._zone_count:
+            if len(self._rank) != self._zone_count:
                 self._reset_lamps()
             else:
                 self._order_lamps()
+            self._limiter.enabled = self.flash_limit
 
     # ---------------------------------------------------------------- lamps
 
     def _build_zones(self, pixel_count):
-        zones = self._config["zones"]
-        if zones <= 0:
-            if pixel_count <= self.AUTO_ZONE_PIXEL_LIMIT:
-                zones = pixel_count
-            else:
-                zones = self.AUTO_ZONE_COUNT
-        zones = max(1, min(zones, pixel_count))
-        self._zone_count = zones
-        self._zone_of_pixel = (np.arange(pixel_count) * zones) // pixel_count
+        self._zone_count, self._zone_of_pixel = zone_map(
+            pixel_count,
+            self._config["zones"],
+            self.AUTO_ZONE_PIXEL_LIMIT,
+            self.AUTO_ZONE_COUNT,
+        )
         self._place_lamps(pixel_count)
 
     def _place_lamps(self, pixel_count):
@@ -475,9 +474,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
         )
 
     def _reset_lamps(self):
-        n = self._zone_count
-        self._lamp_was_bright = np.zeros(n, dtype=bool)
-        self._lamp_last_rise = np.full(n, -np.inf)
+        self._limiter = FlashLimiter(self._zone_count, self.flash_limit)
         self._order_lamps()
 
     def _order_lamps(self):
@@ -573,20 +570,10 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
     # ---------------------------------------------------------------- audio
 
     def _masks_for(self, frequencies):
-        frequencies = np.asarray(frequencies)
-        if self._band_masks is None or self._band_freq_count != len(
-            frequencies
-        ):
-            masks = []
-            for low, high in self.BAND_EDGES:
-                mask = (frequencies >= low) & (frequencies <= high)
-                if not mask.any():
-                    mask[np.argmin(np.abs(frequencies - (low + high) / 2))] = (
-                        True
-                    )
-                masks.append(mask)
-            self._band_masks = masks
-            self._band_freq_count = len(frequencies)
+        key = frequency_key(frequencies)
+        if self._band_masks is None or self._band_freq_key != key:
+            self._band_masks = band_masks(frequencies, self.BAND_EDGES)
+            self._band_freq_key = key
         return self._band_masks
 
     def measure(self, melbank, frequencies, now):
@@ -622,12 +609,10 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
 
     # --------------------------------------------------------------- events
 
-    def _beat_period(self):
-        stepper = self._stepper
-        return max(0.05, stepper.step_interval * stepper.steps_per_beat)
-
     def _envelope_length(self):
-        return (self.attack + self.hold + self.release) * self._beat_period()
+        return (
+            self.attack + self.hold + self.release
+        ) * self._stepper.beat_period()
 
     def _step(self, now):
         """A new event starts on every step."""
@@ -652,9 +637,11 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
     def _prune_events(self, now):
         keep = self._envelope_length()
         if self.family == "chase":
-            keep += self.stagger * self._beat_period() * self._zone_count
+            keep += (
+                self.stagger * self._stepper.beat_period() * self._zone_count
+            )
         elif self.family == "fireworks":
-            keep += self.stagger * self._beat_period()
+            keep += self.stagger * self._stepper.beat_period()
         elif self.family == "adsr":
             keep = self._stepper.step_interval
         self._events = [
@@ -681,7 +668,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
 
     def _envelope(self, age):
         """Family envelope over the age of an event, vectorised."""
-        beat = self._beat_period()
+        beat = self._stepper.beat_period()
         attack = self.attack * beat
         hold = self.hold * beat
         release = self.release * beat
@@ -707,7 +694,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
     def _lamp_ages(self, event, age):
         """Age of an event as every lamp sees it, after its own delay."""
         n = self._zone_count
-        beat = self._beat_period()
+        beat = self._stepper.beat_period()
         if self.family == "chase":
             rank = (
                 (n - 1 - self._rank) if self._reversed(event) else self._rank
@@ -797,7 +784,9 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
             position = self._axis_position(reverse)
             head = 1.0 - abs(p * 2.0 - 1.0)
             width = np.clip(
-                self.trail * self._beat_period() / envelope_length, 0.035, 0.7
+                self.trail * self._stepper.beat_period() / envelope_length,
+                0.035,
+                0.7,
             )
             strength = np.exp(-4.5 * ((position - head) / width) ** 2)
             return strength, head + position
@@ -808,7 +797,9 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
                 return np.zeros(n), np.full(n, roll)
             position = self._axis_position(reverse)
             width = np.clip(
-                self.trail * self._beat_period() / envelope_length, 0.03, 0.95
+                self.trail * self._stepper.beat_period() / envelope_length,
+                0.03,
+                0.95,
             )
             behind = p - position
             strength = np.where(
@@ -888,18 +879,6 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
                 )
         return 1.0 - depth + level * depth
 
-    def _limit_flashes(self, brightness, now):
-        """Suppress a rise to bright that follows the previous one too soon."""
-        if not self.flash_limit:
-            return brightness
-        bright = brightness >= self.FLASH_BRIGHT
-        rising = bright & ~self._lamp_was_bright
-        too_soon = rising & (now - self._lamp_last_rise < self.FLASH_INTERVAL)
-        allowed = rising & ~too_soon
-        self._lamp_last_rise[allowed] = now
-        self._lamp_was_bright = bright & ~too_soon
-        return np.where(too_soon, 0.0, brightness)
-
     def _render_adsr(self, now):
         n = self._zone_count
         if not self._events:
@@ -917,11 +896,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
                     for channel in ("red", "green", "blue")
                 ]
             )
-        peak = float(rgb.max())
-        if peak <= 0.0:
-            return np.zeros((n, 3))
-        color = rgb / peak * 255.0
-        return np.tile(color * peak, (n, 1))
+        return np.tile(rgb * 255.0, (n, 1))
 
     def _render_pulse(self):
         """Every lamp is a level meter for its band."""
@@ -1002,7 +977,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
         if self.family == "adsr":
             out = self._render_adsr(now)
             brightness = out.max(axis=1) / 255.0
-            limited = self._limit_flashes(brightness, now)
+            limited = self._limiter.apply(brightness, now)
             with np.errstate(invalid="ignore", divide="ignore"):
                 scale = np.where(brightness > 0, limited / brightness, 0.0)
             out = out * scale[:, None]
@@ -1011,7 +986,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
                 colors, brightness = self._render_pulse()
             else:
                 colors, brightness = self._render_families(now)
-            brightness = self._limit_flashes(brightness, now)
+            brightness = self._limiter.apply(brightness, now)
             out = colors * brightness[:, None]
 
         self.pixels[:] = out[self._zone_of_pixel]

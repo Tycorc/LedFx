@@ -70,12 +70,32 @@ def device_positions(device):
         return None
     if positions is None:
         return None
-    positions = np.asarray(positions, dtype=float)
+    try:
+        positions = np.asarray(positions, dtype=float)
+    except (TypeError, ValueError):
+        # Ragged or non numeric positions are as good as none
+        return None
     if positions.ndim != 2 or positions.shape[1] != 3 or len(positions) == 0:
         return None
     if len(positions) != device.pixel_count:
         return None
     return positions
+
+
+def zone_map(pixel_count, zones, auto_limit=32, auto_count=8):
+    """
+    Split pixel_count pixels into zones (lamps).
+
+    Returns the zone count and the zone of every pixel. zones <= 0 is
+    automatic: one zone per pixel up to auto_limit pixels, auto_count
+    zones for longer outputs such as strips.
+    """
+    pixel_count = int(pixel_count)
+    zones = int(zones)
+    if zones <= 0:
+        zones = pixel_count if pixel_count <= auto_limit else auto_count
+    zones = max(1, min(zones, pixel_count))
+    return zones, (np.arange(pixel_count) * zones) // pixel_count
 
 
 def virtual_positions(virtual, ledfx):
@@ -134,6 +154,27 @@ def virtual_positions(virtual, ledfx):
     return positions
 
 
+def synthetic_positions(layout, count, rows=1):
+    """
+    Positions for count pixels on a synthetic layout, plus their source.
+
+    layout is one of LAYOUTS. Auto gives a grid for a matrix (rows > 1)
+    and a ring otherwise, Grid without rows picks a square. The source
+    is "ring", "line" or "grid".
+    """
+    count = max(1, int(count))
+    rows = max(1, int(rows))
+    if layout == "Line":
+        return line_positions(count), "line"
+    if layout == "Grid":
+        if rows <= 1:
+            rows = max(1, int(round(math.sqrt(count))))
+        return grid_positions(count, rows), "grid"
+    if layout == "Auto" and rows > 1 and count > rows:
+        return grid_positions(count, rows), "grid"
+    return ring_positions(count), "ring"
+
+
 def resolve_positions(layout, count, virtual=None, ledfx=None):
     """
     Positions for count pixels as an (count, 3) array, plus their source.
@@ -150,21 +191,11 @@ def resolve_positions(layout, count, virtual=None, ledfx=None):
         except Exception:
             rows = 1
 
-    if layout == "Auto":
-        if virtual is not None and ledfx is not None:
-            positions = virtual_positions(virtual, ledfx)
-            if positions is not None and len(positions) == count:
-                return positions, "device"
-        if rows > 1 and count > rows:
-            return grid_positions(count, rows), "grid"
-        return ring_positions(count), "ring"
-    if layout == "Line":
-        return line_positions(count), "line"
-    if layout == "Grid":
-        if rows <= 1:
-            rows = max(1, int(round(math.sqrt(count))))
-        return grid_positions(count, rows), "grid"
-    return ring_positions(count), "ring"
+    if layout == "Auto" and virtual is not None and ledfx is not None:
+        positions = virtual_positions(virtual, ledfx)
+        if positions is not None and len(positions) == count:
+            return positions, "device"
+    return synthetic_positions(layout, count, rows)
 
 
 def zone_positions(positions, zone_of_pixel, zone_count):

@@ -138,6 +138,31 @@ def test_sub_beat_steps_follow_the_bar_oscillator():
     assert stepper.poll(1.5) is True
 
 
+@pytest.mark.parametrize("steps_per_beat", ["1", "2"])
+def test_a_late_beat_does_not_double_the_step(steps_per_beat):
+    stepper = StepTrigger(
+        config(timer_bpm=120, steps_per_beat=steps_per_beat), now=0.0
+    )
+    # The bar oscillator runs on linearly past the next whole beat, which
+    # the tracker only reports 20 ms later: that is one step, not two
+    frames = [
+        (0.50, True, 1.0),
+        (0.52, False, 1.04),
+        (0.75, False, 1.5),
+        (0.98, False, 1.96),
+        (1.00, False, 2.0),
+        (1.02, True, 2.0),
+        (1.04, False, 2.04),
+    ]
+    steps = []
+    for t, beat, phase in frames:
+        stepper.audio(audio(beat=beat, phase=phase), t)
+        if stepper.poll(t):
+            steps.append(t)
+    expected = [0.5, 1.02] if steps_per_beat == "1" else [0.5, 0.75, 1.02]
+    assert steps == expected
+
+
 def test_bass_and_onset_triggers():
     stepper = StepTrigger(config(trigger="Bass hit"), now=0.0)
     stepper.audio(audio(bass=True), 1.0)

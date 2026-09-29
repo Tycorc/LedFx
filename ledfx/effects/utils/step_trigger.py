@@ -111,11 +111,16 @@ class StepTrigger:
             # beat rates stay in time with the music. A detected beat is
             # always a step boundary at one or more steps per beat.
             phase = data.bar_oscillator() * self.steps_per_beat
-            if (
-                (beat and self.steps_per_beat >= 1)
-                or int(phase) != int(self._last_phase)
-                or phase < self._last_phase
-            ):
+            crossed = (
+                int(phase) != int(self._last_phase) or phase < self._last_phase
+            )
+            if crossed and self.steps_per_beat >= 1:
+                # The oscillator runs on past the next whole beat when the
+                # tracker reports that beat late, so whole beat boundaries
+                # are the beat's own: counting the crossing as well would
+                # fire the step twice
+                crossed = int(phase) % int(round(self.steps_per_beat)) != 0
+            if (beat and self.steps_per_beat >= 1) or crossed:
                 self.pending = True
             self._last_phase = phase
 
@@ -174,6 +179,10 @@ class StepTrigger:
     def elapsed(self, now):
         """Seconds since the last step."""
         return now - self.last_step_time
+
+    def beat_period(self):
+        """Seconds per beat from the measured step interval, at least 0.05."""
+        return max(0.05, self.step_interval * self.steps_per_beat)
 
     def progress(self, now):
         """Position within the current step, 0 at the step, 1 at the next."""
