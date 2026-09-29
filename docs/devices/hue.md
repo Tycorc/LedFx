@@ -63,7 +63,13 @@ Any LedFx effect can be set on a Hue device, but bear in mind that the device on
 
 ### Party mode
 
-For a party or rave mode across the room, use the **Rave** effect. It was built for exactly this case: each bulb is a zone, and the zones snap to new palette colours on the beat, with random, wash, chase, alternate and strobe patterns. The built in presets *Club*, *Rainbow Party*, *Strobe Drop*, *Police*, *Round The Room* and *Slow Wash* are good starting points. See the [Rave effect documentation](../effects/simple/rave.md) for all the settings and for tips on bulb friendly step rates.
+Three effects were built for exactly this case, where every pixel is a whole lamp. Together they cover what the Disco mode of hueDynamic and the entertainment effect library of Light DJ do:
+
+- **Disco** is sound to light: bass, voice and treble lamps that flash when their band peaks, a whole room pulse on the beat, or a "neural" mode where colour and brightness follow the music continuously. Presets *Spectrum Party*, *Bass And Treble*, *Peak Pulse*, *Peak Strobe* and *Neural Lounge*. See the [Disco effect documentation](../effects/simple/disco.md).
+- **Light Show** is the pattern library: strobe cycles, scatter fades, stage strobes, fills, splits, waves and palette loops, each with a choice of envelope and an optional backlight, stepping on the beat. Presets are named after the Light DJ effects they reproduce, from *Strobe Cycle* to *Vortex*. See the [Light Show effect documentation](../effects/simple/light_show.md).
+- **Rave** is the simple party mode: the lamps snap to new palette colours on the beat with random, wash, chase, alternate and strobe patterns. Presets *Club*, *Rainbow Party*, *Strobe Drop*, *Police*, *Round The Room* and *Slow Wash*. See the [Rave effect documentation](../effects/simple/rave.md).
+
+For the chase, split and loop patterns set the device's Light order to `Around the room`, `Left to right` or `Front to back` so that the movement follows the walls.
 
 Other effects that work well on a handful of bulbs are **BPM Strobe**, **Bar**, **Multicolor Bar**, **Power**, **Energy** and **Blade Power+**, all of which colour the whole output from the music.
 
