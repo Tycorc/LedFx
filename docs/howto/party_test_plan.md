@@ -118,11 +118,15 @@ Short checks only.
 | `Tyc Sync Strobe` (all, 8 Hz, bursts of 4 on the beat). | Four flashes after every beat, every lamp and every strip segment switching in the same instant. Any lamp lagging is a bridge or bulb limit: note which. |
 | `Club Strobe` at 10 Hz then rate 12. | Clean on and off at 10 Hz. At 12 note whether the bulbs still show separate flashes or smear into a flicker. |
 | `Tyc Rainbow Strobe`. | Every lamp its own palette colour by position, all flashing together. |
-| `Scatter Strobe`. | A different random half of the lamps per flash. |
+| `Confetti Strobe`. | A different random half of the lamps per flash, all switching in the same frame. |
 | `Lighthouse Strobe`, `Ping Pong`, `Corner Chase`. | The flash travels round the room / alternates halves / steps corners. |
 | `Triple Flash`. | Three flashes then a fade out; the fade is visible on the bulbs. |
 | `Bass Gate`. | Strobes only while the bass is loud, silent in breaks. |
 | `Slow Pulse` (2 Hz, 100 ms). | The slow all lamps in sync flash feel; compare with what you remember from the phone app. |
+| Default on time 0.05 s at 8 Hz. | The pop reaches full brightness on the strips; note whether the bulbs need 0.07 s to look as bright. |
+| `Tyc Rainbow Strobe` with background 0.2. | A dim rainbow stays on between the flashes without the flashes looking weaker. |
+| Beat bursts with lead 0 then 0.08 (advanced trigger setting). | With the lead the bursts land on the beat on the bulbs instead of just after it. Note the lead that felt right. |
+| Change rate or spread while running. | The strobe restarts cleanly with one flash, no lamp stays stuck on. |
 
 ## WLED
 
