@@ -30,6 +30,7 @@ CHANNEL_ORDERS = [
     "Left to right",
     "Front to back",
     "Bottom to top",
+    "Along the strips",
 ]
 
 # The v2 streaming protocol addresses channels with a single byte and the
@@ -194,23 +195,29 @@ class HueDevice(NetworkedDevice):
             f"/clip/v2/resource/entertainment_configuration/{entertainment_id}",
         )
         lights = dict()
+        members = dict()
         for channel in response["data"][0]["channels"]:
-            lights.update(
-                {
-                    str(channel["channel_id"]): [
-                        channel["position"]["x"],
-                        channel["position"]["y"],
-                        channel["position"]["z"],
-                    ]
-                }
-            )
+            channel_id = str(channel["channel_id"])
+            lights[channel_id] = [
+                channel["position"]["x"],
+                channel["position"]["y"],
+                channel["position"]["z"],
+            ]
+            # Which light, and which segment of it, every channel paints.
+            # A gradient strip spreads its segments over several channels
+            # and a channel can carry segments of two strips.
+            members[channel_id] = [
+                [member["service"]["rid"], int(member.get("index", 0))]
+                for member in channel.get("members", [])
+                if "service" in member and "rid" in member["service"]
+            ]
 
         if len(lights) > MAX_CHANNELS:
             raise Exception(
                 f"{len(lights)} channels found. A Hue entertainment zone can have at most {MAX_CHANNELS}."
             )
 
-        return lights
+        return lights, members
 
     def _bridge_max_streams(self):
         """
@@ -283,21 +290,121 @@ class HueDevice(NetworkedDevice):
 
         return [channel_id for channel_id, _ in sorted(channels, key=key)]
 
+    @staticmethod
+    def order_along_strips(lights, members, room_order):
+        """
+        Return the channel ids so that the segments of every gradient
+        strip come one after another in strip order.
+
+        Args:
+            lights: {channel id: [x, y, z]} as stored in the device config.
+            members: {channel id: [[light rid, segment index], ...]}, the
+                light segments every channel paints.
+            room_order: the channel ids in the order to fall back on,
+                normally the "Around the room" order.
+
+        Strips that share a channel (the bridge can put the last segment of
+        one strip and the first of the next on one channel) are chained
+        through it so the palette runs straight from one strip into the
+        other. Channels that are not part of a strip, the plain bulbs,
+        follow in room order.
+        """
+        segments = {}
+        for channel_id, channel_members in (members or {}).items():
+            for rid, index in channel_members:
+                segments.setdefault(rid, []).append(
+                    (int(index), int(channel_id))
+                )
+
+        strips = {}
+        for rid, entries in segments.items():
+            chain = []
+            for _, channel_id in sorted(entries):
+                if not chain or chain[-1] != channel_id:
+                    chain.append(channel_id)
+            if len(chain) > 1:
+                strips[rid] = chain
+
+        rank = {int(channel_id): i for i, channel_id in enumerate(room_order)}
+        ordered = []
+        used = set()
+        remaining = dict(strips)
+        while remaining:
+            chosen = None
+            if ordered:
+                # Continue through a strip that shares our last channel
+                for rid, chain in remaining.items():
+                    if ordered[-1] in chain:
+                        chosen = rid
+                        break
+            if chosen is None:
+                chosen = min(
+                    remaining,
+                    key=lambda rid: min(
+                        rank.get(c, 0) for c in remaining[rid]
+                    ),
+                )
+            chain = list(remaining.pop(chosen))
+            if ordered and ordered[-1] in chain:
+                if chain.index(ordered[-1]) > 0:
+                    chain.reverse()
+            elif ordered and rank.get(chain[-1], 0) < rank.get(chain[0], 0):
+                chain.reverse()
+            for channel_id in chain:
+                if channel_id not in used:
+                    ordered.append(channel_id)
+                    used.add(channel_id)
+
+        for channel_id in room_order:
+            if int(channel_id) not in used:
+                ordered.append(int(channel_id))
+                used.add(int(channel_id))
+        return ordered
+
     def _apply_channel_order(self):
         """Refresh the pixel to channel mapping from the stored light positions."""
         lights = self._config.get("pixel_lights")
         if not lights:
             self._channel_ids = None
             return
-        self._channel_ids = self.order_channels(
-            lights, self._config.get("channel_order", "Hue app")
-        )
+        order = self._config.get("channel_order", "Hue app")
+        if order == "Along the strips":
+            room_order = self.order_channels(lights, "Around the room")
+            self._channel_ids = self.order_along_strips(
+                lights, self._config.get("pixel_members") or {}, room_order
+            )
+        else:
+            self._channel_ids = self.order_channels(lights, order)
         _LOGGER.debug(
             "%s: channel order %s -> %s",
             self.name,
             self._config.get("channel_order"),
             self._channel_ids,
         )
+
+    @property
+    def pixel_positions(self):
+        """
+        x, y, z of every pixel in the current light order, or None.
+
+        The positions are the ones placed in the Hue app, from -1 to 1 with
+        x left to right, y back to front and z floor to ceiling. Spatial
+        effects use them to colour every channel by where it stands in the
+        room, so a gradient strip flows along its length.
+        """
+        lights = self._config.get("pixel_lights")
+        if not lights:
+            return None
+        channel_ids = self._channel_ids
+        if channel_ids is None:
+            channel_ids = range(self.pixel_count)
+        positions = []
+        for channel_id in channel_ids:
+            position = lights.get(str(channel_id))
+            if position is None:
+                position = lights.get(channel_id, (0.0, 0.0, 0.0))
+            positions.append([float(p) for p in position][:3])
+        return positions
 
     @staticmethod
     def build_frame(entertainment_id, pixels, channel_ids=None):
@@ -501,7 +608,9 @@ class HueDevice(NetworkedDevice):
         entertainment_group = entertainment_groups[entertainment_id]
         group_id = re.findall(r"\d+", entertainment_group["id_v1"])[0]
 
-        lights = self._lights_from_entertainment_group(entertainment_id)
+        lights, members = self._lights_from_entertainment_group(
+            entertainment_id
+        )
 
         config = {
             "group_id": group_id,
@@ -511,6 +620,9 @@ class HueDevice(NetworkedDevice):
             # x, y, z of every channel, used by channel_order to lay the
             # lights out along the pixel strip
             "pixel_lights": lights,
+            # light rid and segment index of every channel, used by the
+            # "Along the strips" order
+            "pixel_members": members,
             "max_streams": self._bridge_max_streams(),
             "refresh_rate": 30,
         }

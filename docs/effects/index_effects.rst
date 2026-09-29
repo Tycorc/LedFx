@@ -31,6 +31,11 @@ Effects
 .. toctree::
    :maxdepth: 2
 
+   simple/disco
    simple/filter
+   simple/light_show
+   simple/orbit
+   simple/party
    simple/rave
    simple/spotlight
+   simple/true_strobe
