@@ -1132,9 +1132,33 @@ def test_room_double_scatter_and_sprinkle_spread_their_lamps():
             envelope="hold",
             backlight_brightness=0,
         )
-        for _ in range(30):
-            lamps = lit_lamps(step(effect))
-            assert len(lamps) == 2
+        for k in range(30):
+            pixels = step(effect)
+            lamps = lit_lamps(pixels)
+            if len(lamps) != 2:
+                import timeit as _t
+
+                info = dict(
+                    k=k,
+                    pattern=pattern,
+                    now=effect.now,
+                    lit_time=[
+                        round(x - effect.now, 6) for x in effect._lit_time.tolist()
+                    ],
+                    dur=effect._lit_duration.tolist(),
+                    lit_now=effect._lit_now.tolist(),
+                    step_interval=effect._stepper.step_interval,
+                    last=effect._stepper.last_step_time - effect.now,
+                    timer=_t.default_timer,
+                    rng=np.random.default_rng,
+                    levels=[round(x, 3) for x in pixels.max(axis=1).tolist()],
+                    envelope=effect.envelope,
+                    trail=effect.trail,
+                    rhythm=effect.rhythm,
+                    pending=effect._stepper.pending,
+                    lead=effect._stepper.lead,
+                )
+                raise AssertionError(f"DEBUGINFO {info}")
             assert (lamps[1] - lamps[0]) % 8 not in (1, 7)
 
 
