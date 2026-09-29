@@ -47,6 +47,7 @@ def rebase(effect, seed=7):
     effect._build_noise(seed)
     effect._stepper.reset(0.0)
     effect._band._last_time = 0.0
+    effect._sections.reset(0.0)
     effect._limiter.reset(effect._zone_count)
     effect._last_time = 0.0
     effect._reset_state(0.0)
@@ -807,3 +808,105 @@ def test_every_mode_renders_in_range(mode, layout, pixel_count):
         assert pixels.shape == (pixel_count, 3)
         assert np.isfinite(pixels).all()
         assert pixels.min() >= 0 and pixels.max() <= 255
+
+
+# ------------------------------------------------------------ sections
+
+
+def audio_data(level, phase=0.0):
+    """Audio data with a flat melbank at the given level."""
+    data = MagicMock()
+    data.melbanks.melbanks = [np.full(len(FREQS), level)]
+    data.melbanks.melbank_processors = [
+        SimpleNamespace(melbank_frequencies=FREQS)
+    ]
+    data.bar_oscillator = lambda: phase
+    data.bpm_beat_now = lambda: False
+    data.volume_beat_now = lambda: False
+    data.onset = lambda: False
+    return data
+
+
+def feed_sections(effect, level, seconds, start):
+    """Feed a flat level for a while at 50 Hz, returns the end time."""
+    t = start
+    for _ in range(int(seconds * 50)):
+        t += 0.02
+        effect._sections.update(level, t)
+    return t
+
+
+def test_auto_sections_pick_hard_modes_when_loud():
+    effect = make_effect(pixel_count=8, mode="auto", auto_steps=1)
+    feed_sections(effect, 1.0, 3.0, 0.0)
+    assert effect._sections.section == "loud"
+    modes = set()
+    for t in range(4, 30):
+        render_at(effect, float(t))
+        modes.add(effect.mode)
+    assert modes <= set(OrbitEffect.AUTO_LOUD_MODES)
+    assert len(modes) > 2
+
+
+def test_auto_sections_pick_soft_modes_when_quiet():
+    effect = make_effect(pixel_count=8, mode="auto", auto_steps=1)
+    assert effect._sections.section == "quiet"
+    modes = set()
+    for t in range(1, 30):
+        render_at(effect, float(t))
+        modes.add(effect.mode)
+    assert modes <= set(OrbitEffect.AUTO_QUIET_MODES)
+
+
+def test_auto_sections_switch_on_a_drop():
+    effect = make_effect(pixel_count=8, mode="auto", auto_steps=64)
+    render_at(effect, 0.5)
+    quiet_mode = effect.mode
+    assert quiet_mode in OrbitEffect.AUTO_QUIET_MODES
+    # A long quiet build, then the music comes back loud
+    t = feed_sections(effect, 0.02, 6.0, 0.0)
+    for _ in range(5):
+        t += 0.02
+        effect.audio_data_updated(audio_data(1.0))
+        effect._sections.update(1.0, t)
+        if effect._sections.drop:
+            effect._drop_pending = True
+    assert effect._drop_pending
+    render_at(effect, 7.0)
+    assert effect.mode in OrbitEffect.AUTO_LOUD_MODES
+    assert effect.mode != quiet_mode
+    assert not effect._drop_pending
+
+
+def test_audio_updates_feed_the_sections_in_auto_mode():
+    effect = make_effect(pixel_count=4, mode="auto")
+    effect._sections._last_time = 0.0
+    for _ in range(60):
+        effect.audio_data_updated(audio_data(0.8, phase=1.0))
+    assert effect._sections.level > 0.5
+
+
+def test_palette_shift_moves_the_palette():
+    effect = make_effect(pixel_count=4, mode="swirl")
+    plain = effect._palette(np.array([0.5]))[0]
+    effect._palette_shift = 0.5
+    assert effect._palette(np.array([0.0]))[0].tolist() == plain.tolist()
+    # A mode change resets the shift
+    effect.update_config({"mode": "wave"})
+    assert effect._palette_shift == 0.0
+
+
+def test_auto_sections_off_rotates_blindly():
+    effect = make_effect(
+        pixel_count=8, mode="auto", auto_steps=1, auto_sections=False
+    )
+    for _ in range(60):
+        effect.audio_data_updated(audio_data(1.0))
+    # The detector is not fed, and the choice comes from every mode
+    assert effect._sections.section == "quiet"
+    modes = set()
+    for t in range(1, 40):
+        render_at(effect, float(t))
+        modes.add(effect.mode)
+    assert modes & set(OrbitEffect.AUTO_LOUD_MODES)
+    assert modes & set(OrbitEffect.AUTO_QUIET_MODES)

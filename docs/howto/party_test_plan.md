@@ -97,7 +97,21 @@ Hue zone, Light order `Along the strips`, one genre preset at a time.
 | `strobe` envelope at two steps per beat. | Short hard flashes, dark between, no smear on the bulbs. Note if the Hue bulbs smear at four steps per beat. |
 | `auto` pattern, envelope and colour mode. | On loud parts hard patterns (strobe, stage), on quiet parts soft ones (fade, glow); a change every `auto_steps` steps. Note if the loud threshold is right for your input level. |
 | Backlight at 0.25. | Unlit lamps show the backlight colour dimly, the room never goes black. |
-| New envelopes (`peak`, `pulse`, `soft strobe`, `cross fade` ...). | Each looks like its description in the docs; note any that look identical to another on Hue bulbs. |
+| `Tyc Corner Stage`. | Every beat exactly one quarter of the room flashes, strip segments included; a strip along one wall splits sensibly between two corners. |
+| `Tyc Turning Halves`. | Red and blue halves, the divide turning a quarter per beat, no flicker on the change. |
+| `Bow To Stern`. | A block runs back to front then goes, a two beat pause, the colour alternating per round. "Front" is the TV side. |
+| `Soft Dip`. | The whole room warm, one corner dips to black over two beats and snaps back. Is the snap visible through the bulb smear? |
+| `Peak Pop`. | A swell then a short white peak: does the white register on the bulbs? If not, use 1/4 steps. |
+| `Triple Beat`. | Three half beat pulses then 1.5 beats dark, all channels in sync. |
+| `Slow Blend`. | Four beat blends stay smooth, no banding. |
+| `Ember Pot`. | Overlapping embers never leave the room empty. |
+| `Floor Hits` (4 steps per beat, downbeat rhythm). | Hits stay on the beat, held lamps keep lit with no gaps. |
+| `Rolling Block`. | A three lamp rainbow block circles clockwise and stays contiguous across strip segments. |
+| `Tyc Hard Strobe`. | 10 Hz white, all channels together, the bridge keeps up. |
+| `Tyc Party Strobe` and `Blue Light`. | Both keep their fast flashes (their flash limit is off); note if either should be tamed. |
+| Room grouping on the gradient strips. | cycle and fill flow along the segments by position, scatter never lights two adjacent segments. Note whether wave and loop look better by angle (room) or by pixel order. |
+| `Pencil Ramp`. | 0, 25, 50, 75% within one beat per corner: does the dark first quarter read as rhythm or as a dropout? |
+| Room grouping with stages 2. | The two groups are front and back; say whether left and right would feel more natural as the default. |
 
 ## Orbit
 

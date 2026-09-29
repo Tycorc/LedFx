@@ -28,7 +28,7 @@ Lamps that a mode leaves unlit are not simply off: they show their field colour,
 | `corners` | The lamps are grouped into **Sectors** balanced channels around the room (2 = right and left, 4 = the corners, turned by the **Heading**, so 2 with heading 90 is front and back) and every step lights the next channel: clockwise, counter, back and forth (`alternate`) or a random one (`random`, never the same twice). The channel holds, then fades over the **Softness** share of the step. |
 | `noise`   | A three dimensional noise field over the lamps, sampled at the x, y and z of every lamp, drifting with time. **Wavelength** is the size of the blobs in room lengths; **Sectors** above 1 terraces the field into that many colour steps, blended by **Softness**; 1 keeps it smooth, like northern lights. |
 | `scatter` | Every step picks **Sectors** random cluster centres among the lamps and lights the lamps within the **Radius** of a centre with a soft falloff, one palette colour per cluster, in all three dimensions, then holds and fades over the **Softness** share of the step. |
-| `auto`    | Rotates through the modes above, changing every **Auto Steps** steps. |
+| `auto`    | Rotates through the modes above, changing every **Auto Steps** steps. With **Auto Sections** on it follows the music: the loud parts get the hard modes (beacon, sectors, sweep, halves, corners, scatter), the quiet parts the soft ones (swirl, wave, ripple, noise), a drop after a quiet build switches the mode at once, and every 9 to 15 seconds the palette shifts, on a bar boundary. |
 
 ## Settings
 
@@ -49,6 +49,7 @@ Lamps that a mode leaves unlit are not simply off: they show their field colour,
 | **Flash Limit**      | With flash limit on (the default) no lamp can jump to bright more often than about three times a second, whatever the settings. |
 | **Zones** (advanced) | Number of lamps to split the output into. 0 is automatic: one per pixel on a lamp based device and on a matrix, 8 blocks on a long strip. |
 | **Auto Steps** (advanced) | Steps between mode changes in auto mode.                                                      |
+| **Auto Sections** (advanced) | In auto mode, follow the loud, soft and quiet sections of the music, switch on drops and shift the palette every few seconds. Off rotates blindly. |
 | **Color Step** (advanced) | How far along the palette the colour moves per event for sweep, halves, corners and scatter. 0 picks random palette colours at least 15% apart. |
 
 ## Trigger

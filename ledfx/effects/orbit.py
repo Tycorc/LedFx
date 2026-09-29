@@ -22,6 +22,7 @@ from ledfx.effects.utils.layout import (
     resolve_positions,
     zone_positions,
 )
+from ledfx.effects.utils.sections import SectionDetector
 from ledfx.effects.utils.step_trigger import StepTrigger, step_trigger_schema
 
 
@@ -65,6 +66,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
     ADVANCED_KEYS = AudioReactiveEffect.ADVANCED_KEYS + [
         "zones",
         "auto_steps",
+        "auto_sections",
         "color_step",
         "sensitivity",
         "flash_limit",
@@ -84,6 +86,17 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
         "scatter",
     ]
     AUTO_MODES = MODES[1:]
+    # What auto mode picks from in the loud and the quiet sections of a
+    # track when it follows the sections; soft sections pick from all
+    AUTO_LOUD_MODES = [
+        "beacon",
+        "sectors",
+        "sweep",
+        "halves",
+        "corners",
+        "scatter",
+    ]
+    AUTO_QUIET_MODES = ["swirl", "wave", "ripple", "noise"]
     STEPPED_MODES = ("sweep", "halves", "corners", "scatter")
     SPINS = ["clockwise", "counter", "alternate", "random"]
     PLANES = ["floor", "front wall", "side wall"]
@@ -192,6 +205,11 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
                 default=32,
             ): vol.All(vol.Coerce(int), vol.Range(min=1, max=128)),
             vol.Optional(
+                "auto_sections",
+                description="In auto mode follow the loud, soft and quiet sections of the music: hard modes when loud, soft ones when quiet, a new mode on every drop and a palette shift every few seconds",
+                default=True,
+            ): bool,
+            vol.Optional(
                 "color_step",
                 description="How far along the palette the colour moves per event for sweep, halves, corners and scatter. 0 picks random palette colours",
                 default=0.15,
@@ -206,6 +224,8 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
         self._rng = np.random.default_rng()
         self._stepper = StepTrigger(self._config, now)
         self._band = BandLevel(self.band, self.sensitivity, now)
+        self._sections = SectionDetector(now)
+        self._drop_pending = False
         self._last_time = now
         self._build_noise(int(self._rng.integers(1, 2**31)))
         self._build_geometry(pixel_count)
@@ -232,6 +252,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
         self.background = float(c["background"])
         self.flash_limit = bool(c["flash_limit"])
         self.auto_steps = int(c["auto_steps"])
+        self.auto_sections = bool(c["auto_sections"])
         self.color_step = float(c["color_step"])
 
         if getattr(self, "_stepper", None) is not None:
@@ -372,6 +393,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
         self._cluster_centres = np.zeros((0, 3))
         self._cluster_points = np.zeros(0)
         self._auto_mode = None
+        self._palette_shift = 0.0
         if self.mode_config == "auto":
             self._auto_mode = self._auto_choice(None)
         self._step(now)
@@ -383,9 +405,27 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
             return self._auto_mode
         return self.mode_config
 
-    def _auto_choice(self, current):
-        options = [mode for mode in self.AUTO_MODES if mode != current]
+    def _auto_choice(self, current, section=None):
+        """The next auto mode, by the section of the music when known."""
+        options = self.AUTO_MODES
+        if self.auto_sections:
+            if section is None and getattr(self, "_sections", None):
+                section = self._sections.section
+            if section == "loud":
+                options = self.AUTO_LOUD_MODES
+            elif section == "quiet":
+                options = self.AUTO_QUIET_MODES
+        options = [mode for mode in options if mode != current]
+        if not options:
+            options = [mode for mode in self.AUTO_MODES if mode != current]
         return options[int(self._rng.integers(len(options)))]
+
+    def _switch_auto(self, section=None):
+        """Change the auto mode now and start its events afresh."""
+        self._auto_mode = self._auto_choice(self._auto_mode, section)
+        self._event = 0
+        self._channel = -1
+        self._step_count = 0
 
     def _next_point(self):
         """The next palette position for an event."""
@@ -423,9 +463,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
             self.mode_config == "auto"
             and self._step_count % self.auto_steps == 0
         ):
-            self._auto_mode = self._auto_choice(self._auto_mode)
-            self._event = 0
-            self._channel = -1
+            self._switch_auto()
         event = self._event
         self._event += 1
         mode = self.mode
@@ -495,11 +533,24 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
         now = timeit.default_timer()
         self._stepper.audio(data, now)
         melbanks = data.melbanks
+        melbank = melbanks.melbanks[-1]
         self._band.update(
-            melbanks.melbanks[-1],
+            melbank,
             melbanks.melbank_processors[-1].melbank_frequencies,
             now,
         )
+        if self.auto_sections and self.mode_config == "auto":
+            phase = data.bar_oscillator()
+            if not isinstance(phase, (int, float)):
+                phase = None
+            raw = float(
+                np.mean(np.nan_to_num(np.asarray(melbank, dtype=float)))
+            )
+            self._sections.update(raw, now, phase)
+            if self._sections.drop:
+                self._drop_pending = True
+            if self._sections.palette_changed:
+                self._palette_shift = self._sections.palette_offset
 
     # ----------------------------------------------------------------- field
 
@@ -517,7 +568,9 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
 
     def _palette(self, points):
         """Palette colours, (n, 3) in 0..255, for points anywhere on the line."""
-        points = np.mod(np.asarray(points, dtype=float), 1.0)
+        points = np.mod(
+            np.asarray(points, dtype=float) + self._palette_shift, 1.0
+        )
         return self.get_gradient_color_vectorized1d(points)
 
     def _palette_one(self, point):
@@ -670,7 +723,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
         values = self._noise_values()
         if self.sectors > 1:
             values = np.clip(self._terrace(values, self.sectors), 0.0, 1.0)
-        colours = self.get_gradient_color_vectorized1d(values)
+        colours = self._palette(values)
         return colours, ones, colours
 
     # --------------------------------------------------------------- render
@@ -679,6 +732,10 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
         now = self.now
         dt = min(0.5, max(0.0, now - self._last_time))
         self._last_time = now
+        if self._drop_pending:
+            self._drop_pending = False
+            if self.mode_config == "auto" and self.auto_sections:
+                self._switch_auto("loud")
         if self._stepper.poll(now):
             self._step(now)
         self._advance(dt)
