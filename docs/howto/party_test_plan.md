@@ -96,7 +96,7 @@ Hue zone, Light order `Along the strips`, one genre preset at a time.
 
 | Check | Expect |
 |-------|--------|
-| `Tyc Room Turn` (swirl, 8 beats per turn). | One full turn every two bars, in time with the music; the turn stays locked over a whole track. |
+| `Tyc Room Spin` (swirl, 8 beats per turn). | One full turn every two bars, in time with the music; the turn stays locked over a whole track. |
 | `beacon` with 1 and 3 lobes. | One (or three) bright lobes sweeping round, soft edges, dark between them. |
 | `sectors` with 4 sectors, softness 0 then 0.5. | Hard colour quarters turning; softness blends the edges. |
 | `wave` and `ripple`. | A gradient flows across the room / rings run in or out from the centre; the strip shows the gradient within itself. |
@@ -107,6 +107,11 @@ Hue zone, Light order `Along the strips`, one genre preset at a time.
 | `scatter`. | Clusters of neighbouring lamps light per step, not single random lamps. |
 | Reactive depth 0 vs 0.6. | At 0.6 the whole show dims in quiet parts and comes back on accents. |
 | `spin` alternate and counter. | Direction reverses per event / turns the other way. |
+| `Tyc Twin Beacon` at 8 then 2 beats per turn. | At 8 the lobes track cleanly on the bulbs; at 2 note whether the bulbs still follow or smear into mush (then the default should be 16). |
+| `Flip Flood`. | Every beat a new colour floods the room, alternating from the left and the right, all lamps in sync, nothing lagging a beat. |
+| `Corner Chase`. | Four groups of about four channels each, matching the real corners, lit in turn with the room dimly turning behind them. |
+| Silence with the timer fallback. | The field keeps turning at the Timer BPM; brightness sits at 70% with Reactive Depth 0.3. Decide whether 0.3 or 0 should be the default. |
+| Flash limit: beacon at 1 beat per turn at 140 BPM. | No lamp flashes more than about three times a second. |
 | WLED strip (ring fallback). | The strip is split into zones laid out as a ring, so swirl and beacon still turn along the strip. |
 
 ## True Strobe
