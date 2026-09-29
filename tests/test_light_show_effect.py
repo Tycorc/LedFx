@@ -1132,34 +1132,40 @@ def test_room_double_scatter_and_sprinkle_spread_their_lamps():
             envelope="hold",
             backlight_brightness=0,
         )
-        for k in range(30):
-            pixels = step(effect)
-            lamps = lit_lamps(pixels)
-            if len(lamps) != 2:
-                import timeit as _t
-
-                info = {
-                    "k": k,
-                    "pattern": pattern,
-                    "now": effect.now,
-                    "lit_time": [
-                        round(x - effect.now, 6) for x in effect._lit_time.tolist()
-                    ],
-                    "dur": effect._lit_duration.tolist(),
-                    "lit_now": effect._lit_now.tolist(),
-                    "step_interval": effect._stepper.step_interval,
-                    "last": effect._stepper.last_step_time - effect.now,
-                    "timer": _t.default_timer,
-                    "rng": np.random.default_rng,
-                    "levels": [round(x, 3) for x in pixels.max(axis=1).tolist()],
-                    "envelope": effect.envelope,
-                    "trail": effect.trail,
-                    "rhythm": effect.rhythm,
-                    "pending": effect._stepper.pending,
-                    "lead": effect._stepper.lead,
-                }
-                raise AssertionError(f"DEBUGINFO {info}")
+        for _ in range(30):
+            lamps = lit_lamps(step(effect))
+            assert len(lamps) == 2
             assert (lamps[1] - lamps[0]) % 8 not in (1, 7)
+
+
+def test_a_step_on_the_envelope_end_puts_the_old_lamps_out():
+    """
+    Adding a step to a clock just below 256 drops the last bit of the
+    sum, so the elapsed time of the previous lamps comes out a hair
+    short of their envelope. They must be dark all the same.
+    """
+    effect = make_effect(
+        pixel_count=8,
+        pattern="double scatter",
+        stages=2,
+        grouping="room",
+        layout="Ring",
+        envelope="hold",
+        backlight_brightness=0,
+    )
+    effect._stepper.last_step_time = 252.0 + 2.0**-45
+    effect.now = effect._stepper.last_step_time
+    # Forget the lamps of the activation step, lit on the real clock
+    effect._lit_time[:] = -np.inf
+    effect._lit_now[:] = False
+    step(effect)
+    lamps = lit_lamps(step(effect))
+    old = np.isfinite(effect._lit_time) & ~effect._lit_now
+    assert old.any()
+    elapsed = effect.now - effect._lit_time[old]
+    assert elapsed.max() < 2.0 and elapsed.min() > 1.99
+    assert len(lamps) == 2
+    assert not old[lamps].any()
 
 
 def test_room_wave_follows_the_angle_order():

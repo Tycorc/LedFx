@@ -212,6 +212,10 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
     # Lamps closer than this many nearest neighbours count as neighbours
     # for the room grouping of the scatter patterns
     NEIGHBOUR_COUNT = 2
+    # Seconds an envelope ends early: a step that lands on the end of the
+    # previous lamps' envelope finds them dark, whatever float rounding
+    # makes of the elapsed time
+    ENVELOPE_END_TOLERANCE = 1e-6
 
     CONFIG_SCHEMA = vol.Schema(
         {
@@ -882,7 +886,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         progress = np.nan_to_num(progress, nan=1.0, posinf=1.0)
         # A lamp lit by the current step never expires before the next
         # one, whatever the measured interval does
-        active = (elapsed < duration) | self._lit_now
+        active = (elapsed < duration - self.ENVELOPE_END_TOLERANCE) | self._lit_now
         levels = self._envelope_levels(progress, elapsed, duration, active)
         levels *= self._scale
 
