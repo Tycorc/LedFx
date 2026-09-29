@@ -21,7 +21,9 @@ STEP_MAPPINGS = {
 }
 
 
-def step_trigger_schema(trigger="Beat", steps_per_beat="1", timer_bpm=128):
+def step_trigger_schema(
+    trigger="Beat", steps_per_beat="1", timer_bpm=128, lead=0.0
+):
     """Schema entries for the trigger settings, with the given defaults."""
     return {
         vol.Optional(
@@ -39,6 +41,11 @@ def step_trigger_schema(trigger="Beat", steps_per_beat="1", timer_bpm=128):
             description="Tempo for the Timer trigger, also used while no beat is heard",
             default=timer_bpm,
         ): vol.All(vol.Coerce(int), vol.Range(min=20, max=300)),
+        vol.Optional(
+            "lead",
+            description="Seconds the steps fire ahead of the beat to cover the lag of slow lamps, about 0.05 to 0.1 for a Hue bridge",
+            default=lead,
+        ): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=0.3)),
     }
 
 
@@ -50,6 +57,9 @@ class StepTrigger:
     # Bounds for the measured step interval
     MIN_STEP_INTERVAL = 0.05
     MAX_STEP_INTERVAL = 10.0
+    # A real step that arrives this long after its early copy, beyond the
+    # lead itself, still counts as the same step
+    LEAD_TOLERANCE = 0.1
 
     def __init__(self, config, now):
         self.configure(config)
@@ -60,10 +70,17 @@ class StepTrigger:
         self.trigger = config["trigger"]
         self.steps_per_beat = STEP_MAPPINGS[config["steps_per_beat"]]
         self.timer_interval = 60.0 / config["timer_bpm"] / self.steps_per_beat
+        # Seconds the steps fire ahead of the predicted beat, so that slow
+        # lamps light on the beat rather than after it
+        self.lead = max(0.0, float(config.get("lead", 0.0)))
 
     def reset(self, now):
         self.pending = False
         self.last_step_time = now
+        # Time of the last real (audio or timer) step, the reference for
+        # the interval measurement and the early prediction
+        self._anchor = now
+        self._early_fired = False
         # Measured time between the last two steps, used for envelopes
         self.step_interval = self.timer_interval
         # Start with the timer running so the lights move straight away,
@@ -117,20 +134,40 @@ class StepTrigger:
         Return True once for every due step, call from render.
 
         Records the step time and the measured interval between steps.
+        With a lead, an audio step is played early, at the predicted time
+        of the next step minus the lead, and the real step that follows
+        within the lead is swallowed (it still re-anchors the prediction).
         """
-        if (
-            self.using_timer(now)
-            and now - self.last_step_time >= self.timer_interval
-        ):
+        timer = self.using_timer(now)
+        if timer and now - self.last_step_time >= self.timer_interval:
             self.pending = True
+            self._early_fired = False
+
+        if (
+            not timer
+            and not self.pending
+            and self.lead > 0
+            and not self._early_fired
+            and now >= self._anchor + self.step_interval - self.lead
+            and now - self.last_step_time >= self.MIN_STEP_INTERVAL
+        ):
+            self._early_fired = True
+            self.last_step_time = now
+            return True
 
         if not self.pending:
             return False
 
         self.pending = False
-        interval = now - self.last_step_time
+        interval = now - self._anchor
         if self.MIN_STEP_INTERVAL < interval < self.MAX_STEP_INTERVAL:
             self.step_interval = interval
+        self._anchor = now
+        if self._early_fired and not timer:
+            self._early_fired = False
+            if now - self.last_step_time <= self.lead + self.LEAD_TOLERANCE:
+                # Already played early
+                return False
         self.last_step_time = now
         return True
 
