@@ -39,9 +39,7 @@ def test_around_the_room_ignores_height():
 
 def test_around_the_room_uses_the_zone_centre():
     # Same room shifted into one corner of the coordinate space
-    shifted = {
-        k: [x * 0.2 + 0.7, y * 0.2 + 0.7, z] for k, (x, y, z) in ROOM.items()
-    }
+    shifted = {k: [x * 0.2 + 0.7, y * 0.2 + 0.7, z] for k, (x, y, z) in ROOM.items()}
     assert HueDevice.order_channels(shifted, "Around the room") == [
         LEFT,
         FRONT,
@@ -101,9 +99,7 @@ def test_build_frame_layout():
 
 
 def test_build_frame_maps_pixels_to_channels():
-    frame = HueDevice.build_frame(
-        "id", [(1, 2, 3), (4, 5, 6)], channel_ids=[7, 3]
-    )
+    frame = HueDevice.build_frame("id", [(1, 2, 3), (4, 5, 6)], channel_ids=[7, 3])
     body = frame[len(b"HueStream") + 7 + len("id") :]
     assert body == bytes([7, 1, 1, 2, 2, 3, 3, 3, 4, 4, 5, 5, 6, 6])
 

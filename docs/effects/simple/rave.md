@@ -2,7 +2,7 @@
 
 ## Overview
 
-Rave is a party mode in the style of the "disco" and "party" modes found in smart bulb apps such as Hue Essentials and Hue Dynamic.
+Rave is a party mode in the style of the "disco" and "party" modes found in smart bulb party apps.
 
 Where most LedFx effects paint a picture along a strip, Rave treats the output as a handful of independent lamps, called zones, and snaps them to new colours in hard steps on the beat. It was built for smart bulb setups such as a [Philips Hue entertainment zone](../../devices/hue.md), a room full of LIFX bulbs or a few Nanoleaf panels, where every pixel is a whole lamp and there is no "along the strip" to speak of. It also works on strips and matrices by splitting them into zones.
 

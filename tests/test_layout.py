@@ -140,9 +140,7 @@ def test_virtual_positions_average_pixel_groups():
 
 def test_virtual_positions_use_the_first_segment_in_copy_mode():
     devices = {"hue": FakeDevice(CORNERS.tolist())}
-    virtual = FakeVirtual(
-        [["hue", 0, 3, False], ["hue", 0, 3, False]], mapping="copy"
-    )
+    virtual = FakeVirtual([["hue", 0, 3, False], ["hue", 0, 3, False]], mapping="copy")
     virtual.effective_pixel_count = 4
     positions = virtual_positions(virtual, ledfx_with(devices))
     assert positions.shape == (4, 3)
@@ -167,9 +165,7 @@ def test_virtual_positions_are_unknown_when_a_device_has_none():
 def test_resolve_auto_prefers_the_device_positions():
     devices = {"hue": FakeDevice(CORNERS.tolist())}
     virtual = FakeVirtual([["hue", 0, 3, False]])
-    positions, source = resolve_positions(
-        "Auto", 4, virtual, ledfx_with(devices)
-    )
+    positions, source = resolve_positions("Auto", 4, virtual, ledfx_with(devices))
     assert source == "device"
     assert positions.tolist() == CORNERS.tolist()
 

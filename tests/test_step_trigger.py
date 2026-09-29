@@ -75,7 +75,7 @@ def run_beats(stepper, beat_times, end, dt=0.01):
     """Poll every dt, feeding a beat at the given times, returns step times."""
     steps = []
     beats = list(beat_times)
-    for i in range(int(round(end / dt)) + 1):
+    for i in range(round(end / dt) + 1):
         t = round(i * dt, 6)
         if beats and abs(t - beats[0]) < dt / 2:
             stepper.audio(audio(beat=True, phase=0.0), t)
@@ -140,9 +140,7 @@ def test_sub_beat_steps_follow_the_bar_oscillator():
 
 @pytest.mark.parametrize("steps_per_beat", ["1", "2"])
 def test_a_late_beat_does_not_double_the_step(steps_per_beat):
-    stepper = StepTrigger(
-        config(timer_bpm=120, steps_per_beat=steps_per_beat), now=0.0
-    )
+    stepper = StepTrigger(config(timer_bpm=120, steps_per_beat=steps_per_beat), now=0.0)
     # The bar oscillator runs on linearly past the next whole beat, which
     # the tracker only reports 20 ms later: that is one step, not two
     frames = [

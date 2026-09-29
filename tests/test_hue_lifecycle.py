@@ -51,9 +51,7 @@ def test_valid_saved_credentials_accept_v1_object_response(device):
 
 
 def test_invalid_saved_credentials_request_registration(device):
-    device._hue_request = MagicMock(
-        return_value=([{"error": {"type": 1}}], {})
-    )
+    device._hue_request = MagicMock(return_value=([{"error": {"type": 1}}], {}))
     device.update_config = lambda values: device._config.update(values)
     with pytest.raises(Exception, match="Bridge Link Button"):
         device._hue_register()
@@ -136,9 +134,7 @@ def test_reconnect_closes_old_socket_before_starting_again(device):
 
 def test_socket_wrap_failure_closes_raw_socket(device, monkeypatch):
     raw = MagicMock()
-    monkeypatch.setattr(
-        "ledfx.devices.hue.socket.socket", MagicMock(return_value=raw)
-    )
+    monkeypatch.setattr("ledfx.devices.hue.socket.socket", MagicMock(return_value=raw))
     device._dtls_client_context.wrap_socket.side_effect = OSError("TLS error")
     device.activate()
     raw.close.assert_called_once()

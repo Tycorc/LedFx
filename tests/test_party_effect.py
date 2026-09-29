@@ -1,5 +1,6 @@
 """Unit tests for the Party effect families."""
 
+import itertools
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -11,10 +12,7 @@ from ledfx.effects.party import SHAPES, PartyEffect, ahdsr, curve, hash01
 
 FREQS = np.geomspace(20, 15000, 64)
 WHITE = "linear-gradient(90deg, #ffffff 0%, #ffffff 100%)"
-RED_BLUE = (
-    "linear-gradient(90deg, #ff0000 0%, #ff0000 50%, "
-    "#0000ff 50%, #0000ff 100%)"
-)
+RED_BLUE = "linear-gradient(90deg, #ff0000 0%, #ff0000 50%, #0000ff 50%, #0000ff 100%)"
 RED = "linear-gradient(90deg, #ff0000 0%, #ff0000 100%)"
 THIRDS = (
     "linear-gradient(90deg, #ff0000 0%, #ff0000 33.3%, "
@@ -70,9 +68,7 @@ def make_spatial(positions, **config):
         group_size=1,
         rows=1,
     )
-    return make_effect(
-        pixel_count=count, ledfx=ledfx, virtual=virtual, **config
-    )
+    return make_effect(pixel_count=count, ledfx=ledfx, virtual=virtual, **config)
 
 
 def render_at(effect, t):
@@ -155,7 +151,7 @@ def test_burst_events_keep_their_distance():
     starts = [start for start, _ in effect._events]
     assert all(
         b - a >= PartyEffect.BURST_INTERVAL - 1e-9
-        for a, b in zip(starts, starts[1:])
+        for a, b in itertools.pairwise(starts)
     )
 
 
@@ -291,11 +287,7 @@ def test_breathe_rises_and_falls_together():
     early = levels(render_at(effect, 0.2))
     peak = levels(render_at(effect, 0.5))
     late = levels(render_at(effect, 0.8))
-    assert (
-        np.allclose(early, 0.5)
-        and np.allclose(peak, 1.0)
-        and np.allclose(late, 0.5)
-    )
+    assert np.allclose(early, 0.5) and np.allclose(peak, 1.0) and np.allclose(late, 0.5)
 
 
 def test_wash_keeps_every_lamp_lit():
@@ -354,9 +346,7 @@ def test_adsr_single_colour_plays_the_brightness_envelope():
 
 
 def test_adsr_colour_shapes_change_colour_over_the_event():
-    effect = make_effect(
-        pixel_count=1, family="adsr", shape="Frost", curve="ease out"
-    )
+    effect = make_effect(pixel_count=1, family="adsr", shape="Frost", curve="ease out")
     early = render_at(effect, 0.03)[0]
     late = render_at(effect, 0.25)[0]
     # Frost starts near white and ends on blue
@@ -367,9 +357,7 @@ def test_adsr_colour_shapes_change_colour_over_the_event():
 @pytest.mark.parametrize("family", PartyEffect.FAMILIES)
 @pytest.mark.parametrize("pixel_count", [1, 8])
 def test_every_family_renders(family, pixel_count):
-    effect = make_effect(
-        pixel_count=pixel_count, family=family, gradient=RED_BLUE
-    )
+    effect = make_effect(pixel_count=pixel_count, family=family, gradient=RED_BLUE)
     for t in (0.1, 0.6, 1.2, 2.5):
         pixels = render_at(effect, t)
         assert pixels.shape == (pixel_count, 3)
@@ -495,9 +483,7 @@ def test_heading_projection_is_normalised():
 def test_spread_jitter_follows_the_lamp_spacing():
     effect = make_effect(pixel_count=16, layout="Ring")
     spacing = 2 * np.sin(np.pi / 16)
-    assert effect._spread_jitter == pytest.approx(
-        PartyEffect.SPREAD_JITTER * spacing
-    )
+    assert effect._spread_jitter == pytest.approx(PartyEffect.SPREAD_JITTER * spacing)
 
 
 # -------------------------------------------------------------- orders
@@ -745,9 +731,7 @@ def test_lightning_flicker_dips_to_the_flicker_level():
     on = PartyEffect.FLICKER_ON
     dip = PartyEffect.FLICKER_DIP
     assert np.allclose(levels(render_at(effect, 0.02)), 1.0)
-    assert np.allclose(
-        levels(render_at(effect, on + 0.01)), PartyEffect.FLICKER_LEVEL
-    )
+    assert np.allclose(levels(render_at(effect, on + 0.01)), PartyEffect.FLICKER_LEVEL)
     assert np.allclose(levels(render_at(effect, on + dip + 0.02)), 1.0)
     assert np.allclose(levels(render_at(effect, 0.45)), 1.0)
 
@@ -766,9 +750,7 @@ def test_lightning_strike_counts_as_one_flash_for_the_limiter():
     on = PartyEffect.FLICKER_ON
     dip = PartyEffect.FLICKER_DIP
     assert np.allclose(levels(render_at(effect, 0.02)), 1.0)
-    assert np.allclose(
-        levels(render_at(effect, on + 0.01)), PartyEffect.FLICKER_LEVEL
-    )
+    assert np.allclose(levels(render_at(effect, on + 0.01)), PartyEffect.FLICKER_LEVEL)
     # The second flash is not a new rise, so it is not suppressed
     assert np.allclose(levels(render_at(effect, on + dip + 0.02)), 1.0)
 
@@ -827,7 +809,7 @@ def test_fireworks_never_bursts_from_the_same_lamp_twice():
     for t in range(1, 12):
         render_at(effect, float(t))
     origins = [effect._fire_origins[i] for i in range(12)]
-    assert all(a != b for a, b in zip(origins, origins[1:]))
+    assert all(a != b for a, b in itertools.pairwise(origins))
 
 
 def test_fireworks_radius_limits_the_spread():
@@ -883,9 +865,7 @@ def test_fireworks_sparkle_dims_the_fading_tail():
 
 
 def test_pulse_meters_each_band_on_its_own_lamps():
-    effect = make_effect(
-        pixel_count=3, family="pulse", threshold=0.0, gradient=THIRDS
-    )
+    effect = make_effect(pixel_count=3, family="pulse", threshold=0.0, gradient=THIRDS)
     effect._levels[:] = [0.0, 1.0, 0.5, 0.2]
     pixels = render_at(effect, 0.1)
     floor = PartyEffect.METER_FLOOR
@@ -903,16 +883,12 @@ def test_pulse_single_band_drives_every_lamp():
 
 
 def test_pulse_threshold_squelches_quiet_bands():
-    effect = make_effect(
-        pixel_count=3, family="pulse", band="Bass", threshold=0.3
-    )
+    effect = make_effect(pixel_count=3, family="pulse", band="Bass", threshold=0.3)
     effect._levels[:] = [0.0, 0.2, 0.2, 0.2]
     assert np.allclose(levels(render_at(effect, 0.1)), PartyEffect.METER_FLOOR)
     effect._levels[:] = [0.0, 0.65, 0.2, 0.2]
     floor = PartyEffect.METER_FLOOR
-    assert np.allclose(
-        levels(render_at(effect, 0.1)), floor + (1 - floor) * 0.5
-    )
+    assert np.allclose(levels(render_at(effect, 0.1)), floor + (1 - floor) * 0.5)
 
 
 # ------------------------------------------------------ reactive depth

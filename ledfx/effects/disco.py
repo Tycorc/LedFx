@@ -1,8 +1,8 @@
-"""Disco: sound to light for a room of smart bulbs, hueDynamic style."""
+"""Disco: sound to light for a room of smart bulbs."""
 
-import re
 import timeit
 from collections import deque
+from typing import ClassVar
 
 import numpy as np
 import voluptuous as vol
@@ -18,19 +18,16 @@ CHANNEL_LETTERS = "BVT"
 CHANNEL_NAMES = ["bass", "voice", "treble"]
 
 
-def validate_light_map(value):
-    value = str(value).upper().replace(" ", "")
-    if not re.fullmatch(r"[BVT\-]*", value):
-        raise vol.Invalid(
-            "Light map may only contain B, V, T and - (one letter per lamp)"
-        )
-    return value
+def normalise_light_map(value):
+    """Upper case the map, drop spaces and turn unknown letters into -."""
+    value = str(value or "").upper().replace(" ", "")
+    return "".join(letter if letter in CHANNEL_LETTERS else "-" for letter in value)
 
 
 class DiscoEffect(AudioReactiveEffect, GradientEffect):
     """
-    Sound to light in the style of the "Disco" modes of Hue apps such as
-    hueDynamic, for setups where every pixel is a whole lamp.
+    Sound to light in the style of the disco modes of smart bulb party
+    apps, for setups where every pixel is a whole lamp.
 
     Three analysers:
 
@@ -56,7 +53,7 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
 
     NAME = "Disco"
     CATEGORY = "Classic"
-    HIDDEN_KEYS = ["gradient_roll"]
+    HIDDEN_KEYS: ClassVar[list[str]] = ["gradient_roll"]
     ADVANCED_KEYS = AudioReactiveEffect.ADVANCED_KEYS + [
         "zones",
         "light_map",
@@ -71,10 +68,10 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
         "pulse_block",
     ]
 
-    MODES = ["Spectrum", "Peak", "Void"]
-    ASSIGNMENTS = ["Interleaved", "Blocks", "All lights"]
-    CHANNEL_COLORS = ["Palette thirds", "Whole palette"]
-    STYLES = ["Fade + pulse", "Fade", "Hold"]
+    MODES: ClassVar[list[str]] = ["Spectrum", "Peak", "Void"]
+    ASSIGNMENTS: ClassVar[list[str]] = ["Interleaved", "Blocks", "All lights"]
+    CHANNEL_COLORS: ClassVar[list[str]] = ["Palette thirds", "Whole palette"]
+    STYLES: ClassVar[list[str]] = ["Fade + pulse", "Fade", "Hold"]
 
     # With at most this many pixels every pixel is treated as its own lamp
     AUTO_ZONE_PIXEL_LIMIT = 32
@@ -210,7 +207,7 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
                 "light_map",
                 description="Channel per lamp, e.g. BVTBV. B bass, V voice, T treble, - off. Overrides the assignment",
                 default="",
-            ): validate_light_map,
+            ): vol.All(vol.Coerce(str), vol.Length(max=256)),
             vol.Optional(
                 "zones",
                 description="Number of lamps / zones to split the output into. 0 = auto (one per pixel for bulbs)",
@@ -284,10 +281,7 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
         self._hit_count = np.zeros(3, dtype=int)
         self._pulse_block = np.zeros(3, dtype=bool)
         self._points = np.array(
-            [
-                self._next_point(self._rng.random(), channel)
-                for channel in range(3)
-            ]
+            [self._next_point(self._rng.random(), channel) for channel in range(3)]
         )
         self._colors = self._palette(self._points)
         self._last_strobe = -np.inf
@@ -325,9 +319,7 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
             )
             styles = [peak, peak, peak]
         self.channel_fades = np.array([style != "Hold" for style in styles])
-        self.channel_pulses = np.array(
-            [style == "Fade + pulse" for style in styles]
-        )
+        self.channel_pulses = np.array([style == "Fade + pulse" for style in styles])
         self.fade_brightness = self._config["fade_brightness"]
         self.idle_brightness = self._config["idle_brightness"]
         self.strobe = self._config["strobe"]
@@ -343,7 +335,7 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
         self.fade_offset = (self.smoothness - 0.5) * 1.0
         # Void ring buffers: 2 to 5 frames of amplitude, three times
         # that of colour position
-        self._average_len = 2 + int(round(3 * self.smoothness))
+        self._average_len = 2 + round(3 * self.smoothness)
         self._median_len = 3 * self._average_len
         self.palette_thirds = (
             self.mode == "Spectrum"
@@ -361,12 +353,8 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
             self._assign_lamps()
             if len(self._lamp_hit) != self._zone_count:
                 self._reset_lamps()
-            self._void_pos_ring = deque(
-                self._void_pos_ring, maxlen=self._median_len
-            )
-            self._void_amp_ring = deque(
-                self._void_amp_ring, maxlen=self._average_len
-            )
+            self._void_pos_ring = deque(self._void_pos_ring, maxlen=self._median_len)
+            self._void_amp_ring = deque(self._void_amp_ring, maxlen=self._average_len)
 
     # ---------------------------------------------------------------- lamps
 
@@ -406,7 +394,7 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
         channels = [i for i in range(3) if self.enabled[i]]
         lamp_channel = np.full(n, -1, dtype=int)
 
-        light_map = self._config["light_map"]
+        light_map = normalise_light_map(self._config["light_map"])
         if self.mode == "Peak":
             lamp_channel[:] = 0
         elif light_map:
@@ -447,18 +435,14 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
         With palette thirds, bass keeps to the first third of the palette,
         voice to the middle and treble to the last third.
         """
-        shift = self._rng.uniform(
-            self.MIN_PALETTE_STEP, 1.0 - self.MIN_PALETTE_STEP
-        )
+        shift = self._rng.uniform(self.MIN_PALETTE_STEP, 1.0 - self.MIN_PALETTE_STEP)
         if not self.palette_thirds:
             return (point + shift) % 1.0
         start = channel / 3.0
         return start + ((point - start + shift / 3.0) % (1.0 / 3.0))
 
     def _new_channel_color(self, channel):
-        self._points[channel] = self._next_point(
-            self._points[channel], channel
-        )
+        self._points[channel] = self._next_point(self._points[channel], channel)
         self._colors[channel] = self._palette([self._points[channel]])[0]
         return self._colors[channel]
 
@@ -484,9 +468,7 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
     def band_powers(melbank, masks):
         """Mean melbank power in each band."""
         melbank = np.asarray(melbank, dtype=float)
-        return np.array(
-            [float(np.mean(melbank[mask])) for mask in masks], dtype=float
-        )
+        return np.array([float(np.mean(melbank[mask])) for mask in masks], dtype=float)
 
     def _detect(self, channel, power, now, dt):
         """Run the hit detector of one channel on this frame's band power."""
@@ -497,8 +479,7 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
         # The gate left by the previous hit falls linearly to zero
         self._gate[channel] = max(
             0.0,
-            self._gate[channel]
-            - self._last_hit_power[channel] * dt / self.gate_decay,
+            self._gate[channel] - self._last_hit_power[channel] * dt / self.gate_decay,
         )
         corrected = power * self.gain
         triggered = (
@@ -562,10 +543,7 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
 
     def _hit_peak(self, now):
         n = self._zone_count
-        if (
-            self.strobe
-            and now - self._last_strobe < 1.0 / self.STROBE_MAX_RATE
-        ):
+        if self.strobe and now - self._last_strobe < 1.0 / self.STROBE_MAX_RATE:
             # Too soon after the last flash: this hit is dropped before it
             # advances the pulse block bookkeeping
             return
@@ -697,8 +675,7 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
             1.0,
         )[:, None]
         drift = (
-            self._lamp_idle_from
-            + (self._lamp_idle_target - self._lamp_idle_from) * t
+            self._lamp_idle_from + (self._lamp_idle_target - self._lamp_idle_from) * t
         )
         return np.where(lamp_idle[:, None], drift, out)
 

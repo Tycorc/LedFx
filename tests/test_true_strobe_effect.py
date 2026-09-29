@@ -1,5 +1,6 @@
 """Unit tests for the True Strobe effect."""
 
+import itertools
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -11,10 +12,7 @@ from ledfx.effects import Effect
 from ledfx.effects.true_strobe import TrueStrobeEffect
 
 FREQS = np.geomspace(20, 15000, 64)
-RED_BLUE = (
-    "linear-gradient(90deg, #ff0000 0%, #ff0000 50%, "
-    "#0000ff 50%, #0000ff 100%)"
-)
+RED_BLUE = "linear-gradient(90deg, #ff0000 0%, #ff0000 50%, #0000ff 50%, #0000ff 100%)"
 RED = np.array([255.0, 0.0, 0.0])
 BLUE = np.array([0.0, 0.0, 255.0])
 WHITE = np.array([255.0, 255.0, 255.0])
@@ -173,7 +171,7 @@ def test_thirty_fps_keeps_every_flash_apart_at_the_fastest_rate():
             runs.append(effect._flash_index)
         else:
             runs.append(None)
-    for a, b in zip(runs, runs[1:]):
+    for a, b in itertools.pairwise(runs):
         assert a is None or b is None or a == b
 
 
@@ -229,13 +227,11 @@ def test_halves_turn_front_back_then_right_left():
 
 
 def test_corners_step_through_balanced_channels():
-    effect = make_effect(
-        pixel_count=8, spread="corners", sectors=4, rate=4, seed=1
-    )
+    effect = make_effect(pixel_count=8, spread="corners", sectors=4, rate=4, seed=1)
     flashes = [lit_lamps(render_at(effect, k * 0.25)) for k in range(5)]
     assert all(len(lamps) == 2 for lamps in flashes)
     assert len({tuple(lamps) for lamps in flashes[:4]}) == 4
-    assert sorted(sum(flashes[:4], [])) == list(range(8))
+    assert sorted(lamp for flash in flashes[:4] for lamp in flash) == list(range(8))
     assert flashes[4] == flashes[0]
 
 
@@ -261,9 +257,7 @@ def test_ripple_runs_from_the_centre_outwards():
 
 
 def test_scatter_lights_the_density_fraction_and_changes_every_flash():
-    effect = make_effect(
-        pixel_count=16, spread="scatter", density=0.5, rate=4, seed=3
-    )
+    effect = make_effect(pixel_count=16, spread="scatter", density=0.5, rate=4, seed=3)
     sets = [set(lit_lamps(render_at(effect, k * 0.25))) for k in range(12)]
     assert all(len(lamps) == 8 for lamps in sets)
     assert len({frozenset(lamps) for lamps in sets}) > 1
@@ -281,7 +275,7 @@ def test_random_lights_one_lamp_and_never_the_same_twice_running():
     effect = make_effect(pixel_count=6, spread="random", rate=4, seed=5)
     lamps = [lit_lamps(render_at(effect, k * 0.25)) for k in range(20)]
     assert all(len(lit) == 1 for lit in lamps)
-    assert all(a != b for a, b in zip(lamps, lamps[1:]))
+    assert all(a != b for a, b in itertools.pairwise(lamps))
 
 
 @pytest.mark.parametrize("spread", TrueStrobeEffect.SPREADS)
@@ -343,8 +337,7 @@ def test_palette_random_picks_a_palette_colour_per_lamp_per_flash():
     )
     first = render_at(effect, 0.0)
     assert all(
-        np.array_equal(pixel, RED) or np.array_equal(pixel, BLUE)
-        for pixel in first
+        np.array_equal(pixel, RED) or np.array_equal(pixel, BLUE) for pixel in first
     )
     assert any(np.array_equal(pixel, RED) for pixel in first)
     assert any(np.array_equal(pixel, BLUE) for pixel in first)
@@ -409,7 +402,7 @@ def test_tail_fades_out_monotonically_over_the_gap():
     assert level(render_at(effect, 0.05)) == 1.0
     fade = [level(render_at(effect, t)) for t in (0.15, 0.25, 0.35, 0.45)]
     assert all(0.0 < value < 1.0 for value in fade)
-    assert all(a > b for a, b in zip(fade, fade[1:]))
+    assert all(a > b for a, b in itertools.pairwise(fade))
     assert level(render_at(effect, 0.5)) == 1.0
 
 
@@ -425,7 +418,7 @@ def test_last_flash_of_a_burst_fades_towards_the_next_step():
     render_at(effect, 0.125)
     fade = [level(render_at(effect, t)) for t in (0.3, 0.5, 0.7, 0.9)]
     assert all(0.0 < value < 1.0 for value in fade)
-    assert all(a > b for a, b in zip(fade, fade[1:]))
+    assert all(a > b for a, b in itertools.pairwise(fade))
 
 
 def test_background_keeps_the_lamps_dimly_lit_between_flashes():
