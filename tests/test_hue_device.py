@@ -252,3 +252,42 @@ def test_lights_from_entertainment_group_reads_positions_and_members():
     lights, members = device._lights_from_entertainment_group("area")
     assert lights == {"0": [0.1, 0.2, 0.3], "1": [0.0, 0.0, 0.0]}
     assert members == {"0": [["tv", 0], ["tv", 1]], "1": []}
+
+
+def test_pixel_positions_follow_the_channel_order():
+    device = HueDevice.__new__(HueDevice)
+    device._config = {
+        "name": "test",
+        "pixel_count": 3,
+        "channel_order": "Left to right",
+        "pixel_lights": {
+            "0": [1.0, 0.0, 0.5],
+            "1": [-1.0, 0.0, 0.5],
+            "2": [0.0, 1.0, 0.5],
+        },
+    }
+    device._apply_channel_order()
+    assert device._channel_ids == [1, 2, 0]
+    assert device.pixel_positions == [
+        [-1.0, 0.0, 0.5],
+        [0.0, 1.0, 0.5],
+        [1.0, 0.0, 0.5],
+    ]
+
+
+def test_pixel_positions_default_to_channel_id_order():
+    device = HueDevice.__new__(HueDevice)
+    device._config = {
+        "name": "test",
+        "pixel_count": 2,
+        "pixel_lights": {"0": [0.0, 1.0, 0.0], "1": [0.0, -1.0, 0.0]},
+    }
+    device._channel_ids = None
+    assert device.pixel_positions == [[0.0, 1.0, 0.0], [0.0, -1.0, 0.0]]
+
+
+def test_pixel_positions_are_unknown_before_the_zone_is_read():
+    device = HueDevice.__new__(HueDevice)
+    device._config = {"name": "test", "pixel_count": 2}
+    device._channel_ids = None
+    assert device.pixel_positions is None

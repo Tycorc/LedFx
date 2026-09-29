@@ -382,6 +382,30 @@ class HueDevice(NetworkedDevice):
             self._channel_ids,
         )
 
+    @property
+    def pixel_positions(self):
+        """
+        x, y, z of every pixel in the current light order, or None.
+
+        The positions are the ones placed in the Hue app, from -1 to 1 with
+        x left to right, y back to front and z floor to ceiling. Spatial
+        effects use them to colour every channel by where it stands in the
+        room, so a gradient strip flows along its length.
+        """
+        lights = self._config.get("pixel_lights")
+        if not lights:
+            return None
+        channel_ids = self._channel_ids
+        if channel_ids is None:
+            channel_ids = range(self.pixel_count)
+        positions = []
+        for channel_id in channel_ids:
+            position = lights.get(str(channel_id))
+            if position is None:
+                position = lights.get(channel_id, (0.0, 0.0, 0.0))
+            positions.append([float(p) for p in position][:3])
+        return positions
+
     @staticmethod
     def build_frame(entertainment_id, pixels, channel_ids=None):
         """
