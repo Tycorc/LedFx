@@ -41,6 +41,32 @@ def band_level_schema(band="Full", reactive_depth=0.3):
     }
 
 
+def frequency_key(frequencies):
+    """A cheap key that changes whenever the melbank frequency axis does."""
+    frequencies = np.asarray(frequencies, dtype=float)
+    if len(frequencies) == 0:
+        return (0, 0.0, 0.0)
+    return (len(frequencies), float(frequencies[0]), float(frequencies[-1]))
+
+
+def band_masks(frequencies, edges):
+    """
+    Boolean melbank masks for a list of (low, high) Hz bands.
+
+    A band narrower than the melbank resolution takes the nearest bin so
+    that it still does something.
+    """
+    frequencies = np.asarray(frequencies, dtype=float)
+    masks = []
+    for low, high in edges:
+        low, high = min(low, high), max(low, high)
+        mask = (frequencies >= low) & (frequencies <= high)
+        if not mask.any() and len(frequencies):
+            mask[np.argmin(np.abs(frequencies - (low + high) / 2))] = True
+        masks.append(mask)
+    return masks
+
+
 class BandLevel:
     """One smoothed band level, fed from the melbank."""
 
@@ -63,7 +89,7 @@ class BandLevel:
 
     def _mask_for(self, frequencies):
         frequencies = np.asarray(frequencies, dtype=float)
-        key = (self.band, len(frequencies))
+        key = (self.band, frequency_key(frequencies))
         if self._mask_key != key:
             low, high = BAND_EDGES[self.band]
             mask = (frequencies >= low) & (frequencies <= high)

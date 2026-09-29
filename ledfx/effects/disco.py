@@ -10,6 +10,8 @@ import voluptuous as vol
 from ledfx.color import parse_color, validate_color
 from ledfx.effects.audio import AudioReactiveEffect
 from ledfx.effects.gradient import GradientEffect
+from ledfx.effects.utils.band_level import band_masks, frequency_key
+from ledfx.effects.utils.layout import zone_map
 
 # Channel letters accepted by light_map, in channel index order
 CHANNEL_LETTERS = "BVT"
@@ -266,7 +268,7 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
         now = timeit.default_timer()
         self._rng = np.random.default_rng()
         self._band_masks = None
-        self._band_freq_count = 0
+        self._band_freq_key = None
         self._last_frame_time = now
 
         # Per channel detector state. The history starts at full scale so
@@ -369,15 +371,12 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
     # ---------------------------------------------------------------- lamps
 
     def _build_zones(self, pixel_count):
-        zones = self._config["zones"]
-        if zones <= 0:
-            if pixel_count <= self.AUTO_ZONE_PIXEL_LIMIT:
-                zones = pixel_count
-            else:
-                zones = self.AUTO_ZONE_COUNT
-        zones = max(1, min(zones, pixel_count))
-        self._zone_count = zones
-        self._zone_of_pixel = (np.arange(pixel_count) * zones) // pixel_count
+        self._zone_count, self._zone_of_pixel = zone_map(
+            pixel_count,
+            self._config["zones"],
+            self.AUTO_ZONE_PIXEL_LIMIT,
+            self.AUTO_ZONE_COUNT,
+        )
 
     def _reset_lamps(self):
         n = self._zone_count
@@ -475,23 +474,10 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
 
     def _masks_for(self, frequencies):
         """Boolean melbank masks for the bands, cached per frequency axis."""
-        frequencies = np.asarray(frequencies)
-        if self._band_masks is None or self._band_freq_count != len(
-            frequencies
-        ):
-            masks = []
-            for low, high in self._band_edges():
-                low, high = min(low, high), max(low, high)
-                mask = (frequencies >= low) & (frequencies <= high)
-                if not mask.any():
-                    # Band narrower than the melbank resolution, take the
-                    # nearest bin so the channel still does something
-                    mask[np.argmin(np.abs(frequencies - (low + high) / 2))] = (
-                        True
-                    )
-                masks.append(mask)
-            self._band_masks = masks
-            self._band_freq_count = len(frequencies)
+        key = frequency_key(frequencies)
+        if self._band_masks is None or self._band_freq_key != key:
+            self._band_masks = band_masks(frequencies, self._band_edges())
+            self._band_freq_key = key
         return self._band_masks
 
     @staticmethod
@@ -576,14 +562,19 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
 
     def _hit_peak(self, now):
         n = self._zone_count
+        if (
+            self.strobe
+            and now - self._last_strobe < 1.0 / self.STROBE_MAX_RATE
+        ):
+            # Too soon after the last flash: this hit is dropped before it
+            # advances the pulse block bookkeeping
+            return
         if self.link_lights:
             lamps = np.arange(n)
         else:
             lamps = np.array([int(self._rng.integers(n))])
         fade = self._fade_for(0, now, self.PEAK_PULSE_BLOCK)
         if self.strobe:
-            if now - self._last_strobe < 1.0 / self.STROBE_MAX_RATE:
-                return
             self._last_strobe = now
             self._lamp_strobe_until[lamps] = now + self.STROBE_ON
             self._lamp_dark_after[lamps] = True

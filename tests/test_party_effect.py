@@ -49,7 +49,7 @@ def make_effect(pixel_count=4, ledfx=None, virtual=None, seed=None, **config):
     effect._fire_origins = {}
     effect._last_burst = 0.0
     effect._last_level_time = 0.0
-    effect._lamp_last_rise[:] = -np.inf
+    effect._limiter.reset(effect._zone_count)
     effect.now = 0.0
     return effect
 
