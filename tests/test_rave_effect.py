@@ -1,7 +1,7 @@
 """Unit tests for the Rave (party mode) effect."""
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -17,8 +17,10 @@ def make_effect(pixel_count=5, **config):
     effect = RaveEffect(ledfx=MagicMock(), config=config)
     virtual = SimpleNamespace(effective_pixel_count=pixel_count, id="test")
     # Effect.activate runs the on_activate hooks but skips the audio
-    # subscription that AudioReactiveEffect.activate would set up.
-    Effect.activate(effect, virtual)
+    # subscription that AudioReactiveEffect.activate would set up. The
+    # clock starts at zero so the step times the tests add stay exact.
+    with patch("timeit.default_timer", lambda: 0.0):
+        Effect.activate(effect, virtual)
     effect.now = effect._last_step_time
     return effect
 

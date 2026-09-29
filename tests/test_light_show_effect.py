@@ -21,9 +21,18 @@ SEED = 7
 
 
 def activate(effect, virtual, seed=SEED):
-    """Activate with a seeded random generator so runs are reproducible."""
+    """
+    Activate with a seeded random generator and the clock at zero.
+
+    Runs are then reproducible, and the step times the harness adds up
+    from zero stay exact instead of picking up rounding from wherever
+    the machine's clock happens to be.
+    """
     default_rng = np.random.default_rng
-    with patch("numpy.random.default_rng", lambda: default_rng(seed)):
+    with (
+        patch("numpy.random.default_rng", lambda: default_rng(seed)),
+        patch("timeit.default_timer", lambda: 0.0),
+    ):
         Effect.activate(effect, virtual)
 
 
