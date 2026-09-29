@@ -49,6 +49,7 @@
    /howto/complex_segments
    /howto/reorder
    /howto/alpha
+   /howto/party_test_plan
 
 .. toctree::
    :maxdepth: 2

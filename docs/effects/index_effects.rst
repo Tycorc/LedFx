@@ -34,6 +34,8 @@ Effects
    simple/disco
    simple/filter
    simple/light_show
+   simple/orbit
    simple/party
    simple/rave
    simple/spotlight
+   simple/true_strobe

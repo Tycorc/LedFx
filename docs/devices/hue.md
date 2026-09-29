@@ -58,6 +58,12 @@ When you set up an entertainment area, the Hue app asks you to place every light
 
 The order can be changed at any time from the device settings. Positions are read from the bridge every time LedFx starts, so after moving lights on the map in the Hue app, restart LedFx to pick up the new layout.
 
+## Room positions
+
+Besides the light order, the device keeps the x, y, z position of every channel as placed in the Hue app (x left to right, y back to front, z floor to ceiling, from -1 to 1) and hands them to the effects. The spatial effects colour every channel by **where it stands in the room** rather than by its pixel number: [Orbit](../effects/simple/orbit.md) lays a colour field over the room and turns, sweeps or scatters it, [True Strobe](../effects/simple/true_strobe.md) can flash by position, and [Light Show](../effects/simple/light_show.md) and [Party](../effects/simple/party.md) have room based groupings and movements. A gradient strip has one channel per segment and every segment its own position, so neighbouring segments get neighbouring colours and a palette flows along the strip and on through the room whatever light order is set. Positions are read together with the light order when LedFx starts.
+
+Devices that know no positions (a WLED strip, a matrix) get a synthetic layout from the effect's **Layout** setting: a ring around the room by default, so a strip still "turns", a line, or a grid for a matrix virtual with rows.
+
 ## Using the device
 
 While the LedFx device is active the entertainment zone is in streaming mode. The Hue app shows this and will not let you control those lights from its own scenes until LedFx releases them, which happens when the virtual is turned off or LedFx exits.
@@ -66,14 +72,16 @@ Any LedFx effect can be set on a Hue device, but bear in mind that the device on
 
 ### Party mode
 
-Four effects were built for exactly this case, where every pixel is a whole lamp:
+Six effects were built for exactly this case, where every pixel is a whole lamp:
 
 - **Disco** is sound to light: bass, voice and treble lamps that flash when their band hits and fade until the next beat, a one lamp per beat Peak mode, and the Void analyser where colour and brightness follow the music continuously. Genre presets from *Pop* to *Ambient*, plus *Peak Pulse*, *Peak Strobe* and *Enter The Void*. See the [Disco effect documentation](../effects/simple/disco.md).
 - **Party** is the smooth show engine: chases, rings, washes, scans, comets, twinkles, breathing and bursts that rise and fall on the beat and can follow the music level. Presets from *Frost Strike* to *Tyc Scatter Strobe*. See the [Party effect documentation](../effects/simple/party.md).
 - **Light Show** is the hard edged pattern library: strobe cycles, scatter glows, stage strobes, fills, splits, waves and palette loops, each with a choice of envelope and an optional backlight, and *Tyc Autopilot* changes the show by itself every few bars. See the [Light Show effect documentation](../effects/simple/light_show.md).
+- **Orbit** is the room turning engine: every lamp is coloured by its position and a colour field turns, waves, sweeps, splits, drifts or scatters over the room, beat synced. Presets from *Tyc Room Turn* to *Tyc Cluster Scatter*. See the [Orbit effect documentation](../effects/simple/orbit.md).
+- **True Strobe** is the hard strobe: every lamp switching in the same frame at a set rate, all together or by position, continuous, in beat bursts or gated by the bass. See the [True Strobe effect documentation](../effects/simple/true_strobe.md).
 - **Rave** is the simple party mode: the lamps snap to new palette colours on the beat with random, wash, chase, alternate and strobe patterns. See the [Rave effect documentation](../effects/simple/rave.md).
 
-For anything that turns the room (chase, loop, scan, split) set the device's Light order to `Around the room`, `Left to right` or `Front to back` so that the movement follows the walls.
+For the pixel order based movements (the Rave chase, Light Show `cycle` and `loop`, Party `chase` and `scan` in `Position` order) set the device's Light order to `Around the room`, `Left to right`, `Front to back` or `Along the strips` so that the movement follows the walls or the strips. Orbit, True Strobe and the room based options of Light Show and Party use the [room positions](#room-positions) directly and look the same whatever light order is set.
 
 Other effects that work well on a handful of bulbs are **BPM Strobe**, **Bar**, **Multicolor Bar**, **Power**, **Energy** and **Blade Power+**, all of which colour the whole output from the music.
 
