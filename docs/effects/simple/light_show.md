@@ -11,10 +11,17 @@ Light Show reproduces the entertainment effect libraries of Hue DJ apps such as 
 
 Like [Rave](rave.md), the output is treated as a handful of independent lamps (one per pixel on a [Hue entertainment zone](../../devices/hue.md), 8 blocks on a long strip) and the steps come from the beat tracker, bass hits, onsets or a timer. When no beat has been heard for five seconds the timer takes over so the show keeps going between tracks and without any audio at all.
 
+## Auto Mode
+
+Set **Pattern**, **Envelope** or **Colour mode** (or all three) to `auto` and Light Show runs its own show, like the autopilot of a DJ app. Every **Auto Steps** steps (16 by default, four bars at one step per beat) the settings on auto change to something else. The choice follows the music: while the bass is loud the picks come from the harder set (`all`, `stage`, `double`, `split`, `scatter` patterns with `strobe`, `flare`, `fade` or `hold` envelopes), in quieter passages from the softer set (`cycle`, `fill`, `wave`, `loop` patterns with `fade`, `glow`, `grow` or `hold`). Settings that are not on auto are left alone, so `cycle` pattern with `auto` envelope walks round the room forever while the envelope changes.
+
+The *Auto Pilot* preset is the no hands option for a party. To switch between whole effects automatically, for example between Auto Pilot, Disco and Rave, put them in scenes and use a LedFx playlist in shuffle mode.
+
 ## Patterns
 
 | Pattern          | Lamps lit on each step                                                     |
 |------------------|----------------------------------------------------------------------------|
+| `auto`           | Picked automatically, see [Auto Mode](#auto-mode).                         |
 | `all`            | Every lamp.                                                                |
 | `cycle`          | One lamp, the next one in light order every step.                          |
 | `scatter`        | One lamp at random, never the same one twice in a row.                     |
@@ -31,6 +38,7 @@ Like [Rave](rave.md), the output is treated as a handful of independent lamps (o
 
 | Envelope | During the step                                                             |
 |----------|-----------------------------------------------------------------------------|
+| `auto`   | Picked automatically, see [Auto Mode](#auto-mode).                           |
 | `strobe` | A short flash of at most 50 ms, **Strobe Flashes** times per step, then off. |
 | `hold`   | On for the whole step, hard cut at the next.                                 |
 | `fade`   | Full at the start of the step, fading to the backlight by the next step.     |
@@ -42,6 +50,7 @@ Like [Rave](rave.md), the output is treated as a handful of independent lamps (o
 
 | Colour mode | Where colours come from                                                    |
 |-------------|----------------------------------------------------------------------------|
+| `auto`      | Picked automatically, see [Auto Mode](#auto-mode).                         |
 | `cycle`     | The lit lamps take the same colour, and it moves **Color Step** along the palette every step. A hard edged three colour palette with a step of 0.34 gives the classic red, white, blue palette strobe. A step of 0 keeps one colour. |
 | `random`    | Every lit lamp picks its own random palette colour, always at least 15% along from its last one. |
 | `per lamp`  | Each lamp has a fixed position on the palette: the first lamp the start, the last lamp the end. With a two colour palette and the `split` pattern this gives the two colour left / right shows. |
@@ -56,7 +65,7 @@ The **Backlight** colour and **Backlight Brightness** are what the unlit lamps s
 
 ## Advanced Controls
 
-**Zones** splits the output into a number of lamps (`0` is automatic), **Color Step** is described under colour modes, **Strobe Flashes** is the number of flashes per step for the strobe envelope, and **Flare Color** is the colour a flare starts from.
+**Auto Steps** is the number of steps between automatic changes. **Zones** splits the output into a number of lamps (`0` is automatic), **Color Step** is described under colour modes, **Strobe Flashes** is the number of flashes per step for the strobe envelope, and **Flare Color** is the colour a flare starts from.
 
 ```{warning}
 Flashing lights, and in particular whole room flashes faster than about three per second, can trigger seizures in people with photosensitive epilepsy. Check who is in the room before using the strobe envelope at high step rates.
@@ -68,6 +77,8 @@ The presets are named after the Light DJ effects they reproduce.
 
 | Preset               | Pattern | Envelope | Colours  | Notes                                             |
 |----------------------|---------|----------|----------|---------------------------------------------------|
+| Auto Pilot           | auto    | auto     | auto     | Changes every four bars, harder when loud         |
+| Auto Pilot Backlit   | auto    | auto     | auto     | Two steps a beat over a dim blue room, 8 bars     |
 | Strobe Cycle         | cycle   | strobe   | cycle    | One blue flash walking round the room             |
 | Party Strobe         | all     | strobe   | random   | Every lamp a random rainbow colour, twice a beat  |
 | Scatter Fade         | scatter | fade     | cycle    | Pink fades on random lamps                        |
@@ -81,6 +92,10 @@ The presets are named after the Light DJ effects they reproduce.
 | Palette Loop         | loop    | hold     | per lamp | The rainbow walking round the room                |
 | Vortex               | loop    | glow     | per lamp | Pink and green chasing, two repeats               |
 | Police               | split   | strobe   | per lamp | Red and blue halves flashing at 300 changes/min   |
+
+## Strips And Matrices
+
+Light Show is not limited to bulbs. On a WLED strip or matrix the output is split into 8 zones (or the number set in **Zones**), so a strip becomes a row of eight virtual lamps and the same patterns run along it. **Zones** set to the number of segments in the room, for instance one per wall, is a good starting point.
 
 ## Building Your Own
 

@@ -305,3 +305,25 @@ def test_config_update_reassigns_lamps():
     settle(effect)
     feed(effect, melbank(bass=0.9), 0.0)
     assert lit_lamps(render_at(effect, 0.0)) == [0, 1]
+
+
+def test_palette_thirds_keep_each_channel_in_its_third():
+    effect = make_effect(pixel_count=3)
+    for _ in range(50):
+        for channel in range(3):
+            point = effect._next_point(effect._points[channel], channel)
+            assert channel / 3 <= point < (channel + 1) / 3
+            effect._points[channel] = point
+
+
+def test_whole_palette_lets_channels_roam():
+    effect = make_effect(pixel_count=3, channel_colors="Whole palette")
+    points = {
+        int(effect._next_point(effect._rng.random(), 0) * 3) for _ in range(60)
+    }
+    assert points == {0, 1, 2}
+
+
+def test_peak_mode_uses_the_whole_palette():
+    effect = make_effect(pixel_count=3, mode="Peak")
+    assert not effect.palette_thirds

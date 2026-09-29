@@ -58,6 +58,10 @@ With **Fade** off the lamps do not pulse at all but follow the loudness of their
 
 The palette is the normal LedFx gradient picker and plays the role of the hue range sliders in the app: every hit picks a new colour from it, at least 15% further along than the last one so every hit is a visible change. A palette with a single colour gives single colour pulses.
 
+In Spectrum mode **Channel Colors** decides how the three channels share it. `Palette thirds` (the default) gives the bass channel the first third of the palette, voice the middle and treble the last third, so with a rainbow palette the bass lamps stay in the reds and oranges and the treble lamps in the blues and pinks, and you can tell the channels apart at a glance. `Whole palette` lets every channel roam the full palette, which is how the app behaves with all three hue ranges set wide.
+
+Saved gradients and the Now Playing album art gradient apply to Disco like any other gradient effect. The album art gradient also sets the strobe colour to the palette's end colour.
+
 ## Advanced Controls
 
 ### Band Edges

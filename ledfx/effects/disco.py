@@ -64,6 +64,7 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
 
     MODES = ["Spectrum", "Peak", "Neural"]
     ASSIGNMENTS = ["Interleaved", "Blocks", "All lights"]
+    CHANNEL_COLORS = ["Palette thirds", "Whole palette"]
 
     # With at most this many pixels every pixel is treated as its own lamp
     AUTO_ZONE_PIXEL_LIMIT = 32
@@ -147,6 +148,11 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
                 default="Interleaved",
             ): vol.In(ASSIGNMENTS),
             vol.Optional(
+                "channel_colors",
+                description="Spectrum mode: bass, voice and treble each keep to their third of the palette, or all three roam the whole palette",
+                default="Palette thirds",
+            ): vol.In(CHANNEL_COLORS),
+            vol.Optional(
                 "modulate_saturation",
                 description="Neural mode: transients wash the colour towards white",
                 default=True,
@@ -207,7 +213,12 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
         self._average = np.zeros(3)
         self._follow = np.zeros(3)
         self._hit_time = np.full(3, -np.inf)
-        self._points = self._rng.random(3)
+        self._points = np.array(
+            [
+                self._next_point(self._rng.random(), channel)
+                for channel in range(3)
+            ]
+        )
         self._colors = self._palette(self._points)
         # Neural state
         self._loudness = 0.0
@@ -226,6 +237,10 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
         self.fast_pulse = self._config["fast_pulse"]
         self.strobe = self._config["strobe"]
         self.modulate_saturation = self._config["modulate_saturation"]
+        self.palette_thirds = (
+            self.mode == "Spectrum"
+            and self._config["channel_colors"] == "Palette thirds"
+        )
         self.strobe_color = np.array(
             parse_color(self._config["strobe_color"]), dtype=float
         )
@@ -316,11 +331,20 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
             np.asarray(points, dtype=float) % 1.0
         )
 
-    def _next_point(self, point):
+    def _next_point(self, point, channel):
+        """
+        A new palette position for a channel, clearly away from the old one.
+
+        With palette thirds, bass keeps to the first third of the palette,
+        voice to the middle and treble to the last third.
+        """
         shift = self._rng.uniform(
             self.MIN_PALETTE_STEP, 1.0 - self.MIN_PALETTE_STEP
         )
-        return (point + shift) % 1.0
+        if not self.palette_thirds:
+            return (point + shift) % 1.0
+        start = channel / 3.0
+        return start + ((point - start + shift / 3.0) % (1.0 / 3.0))
 
     # ---------------------------------------------------------------- audio
 
@@ -380,7 +404,9 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
         hits &= self.enabled
         for channel in np.flatnonzero(hits):
             self._hit_time[channel] = now
-            self._points[channel] = self._next_point(self._points[channel])
+            self._points[channel] = self._next_point(
+                self._points[channel], channel
+            )
         if hits.any():
             self._colors = self._palette(self._points)
 

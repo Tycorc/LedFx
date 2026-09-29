@@ -41,6 +41,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
     ]
 
     PATTERNS = [
+        "auto",
         "all",
         "cycle",
         "scatter",
@@ -53,8 +54,33 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         "wave",
         "loop",
     ]
-    ENVELOPES = ["strobe", "hold", "fade", "grow", "glow", "flare"]
-    COLOR_MODES = ["cycle", "random", "per lamp"]
+    ENVELOPES = ["auto", "strobe", "hold", "fade", "grow", "glow", "flare"]
+    COLOR_MODES = ["auto", "cycle", "random", "per lamp"]
+
+    # What auto mode picks from. Loud passages get the harder patterns and
+    # envelopes, quiet ones the softer set.
+    AUTO_LOUD_PATTERNS = [
+        "all",
+        "stage",
+        "double",
+        "split",
+        "scatter",
+        "double scatter",
+        "scatter fill",
+    ]
+    AUTO_QUIET_PATTERNS = [
+        "cycle",
+        "fill",
+        "wave",
+        "loop",
+        "scatter",
+        "double",
+    ]
+    AUTO_LOUD_ENVELOPES = ["strobe", "flare", "fade", "hold"]
+    AUTO_QUIET_ENVELOPES = ["fade", "glow", "grow", "hold"]
+    AUTO_COLOR_MODES = ["cycle", "random", "per lamp"]
+    # Filtered lows power above which a passage counts as loud
+    AUTO_LOUD_LEVEL = 0.35
 
     # Minimum distance along the palette between a lamp's old and new
     # colour in random colour mode, so that every step is a visible change
@@ -87,6 +113,11 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
                 default="cycle",
             ): vol.In(COLOR_MODES),
             **step_trigger_schema(),
+            vol.Optional(
+                "auto_steps",
+                description="Steps between changes when pattern, envelope or colour mode is set to auto",
+                default=16,
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=128)),
             vol.Optional(
                 "stages",
                 description="Groups for the stage pattern, peaks for wave, palette repeats for loop",
@@ -136,8 +167,10 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         self._fill_order = None
         self._filled = 0
         self._color_point = self._rng.random()
+        self._energy = 0.0
         self._zone_points = None
         self._zone_colors = None
+        self._auto_pick()
         self._build_zones(pixel_count)
         self._lit_now = np.zeros(self._zone_count, dtype=bool)
         self._lit = np.zeros(self._zone_count, dtype=bool)
@@ -147,7 +180,11 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         self.pattern = self._config["pattern"]
         self.envelope = self._config["envelope"]
         self.color_mode = self._config["color_mode"]
+        self.auto_steps = self._config["auto_steps"]
         self.stages = self._config["stages"]
+        self._energy_filter = self.create_filter(
+            alpha_decay=0.02, alpha_rise=0.1
+        )
         self.color_step = self._config["color_step"]
         self.strobe_flashes = self._config["strobe_flashes"]
         self.backlight = (
@@ -160,6 +197,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         if getattr(self, "_stepper", None) is not None:
             self._stepper.configure(self._config)
         if getattr(self, "pixels", None) is not None:
+            self._auto_pick()
             self._build_zones(self.pixel_count)
             if len(self._lit_now) != self._zone_count:
                 # The lamp count changed, start the pattern over
@@ -168,6 +206,44 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
                 self._fill_order = None
                 self._filled = 0
             self._recolor_per_lamp()
+
+    # ----------------------------------------------------------------- auto
+
+    def _auto_choice(self, options, current):
+        """A random option, never the current one when there is a choice."""
+        options = [option for option in options if option != current]
+        if not options:
+            return current
+        return options[int(self._rng.integers(len(options)))]
+
+    def _auto_pick(self):
+        """Resolve every setting on auto to a concrete value."""
+        loud = self._energy >= self.AUTO_LOUD_LEVEL
+        if self._config["pattern"] == "auto":
+            options = (
+                self.AUTO_LOUD_PATTERNS if loud else self.AUTO_QUIET_PATTERNS
+            )
+            self.pattern = self._auto_choice(options, self.pattern)
+            self._fill_order = None
+            self._filled = 0
+        if self._config["envelope"] == "auto":
+            options = (
+                self.AUTO_LOUD_ENVELOPES if loud else self.AUTO_QUIET_ENVELOPES
+            )
+            self.envelope = self._auto_choice(options, self.envelope)
+        if self._config["color_mode"] == "auto":
+            self.color_mode = self._auto_choice(
+                self.AUTO_COLOR_MODES, self.color_mode
+            )
+            self._recolor_per_lamp()
+
+    @property
+    def on_auto(self):
+        return "auto" in (
+            self._config["pattern"],
+            self._config["envelope"],
+            self._config["color_mode"],
+        )
 
     # ---------------------------------------------------------------- zones
 
@@ -299,6 +375,8 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
     def _step(self, now):
         """Advance the pattern by one step."""
         self._step_count += 1
+        if self.on_auto and self._step_count % self.auto_steps == 0:
+            self._auto_pick()
         self._lit_now = self._pick_lamps()
 
         mode = self.color_mode
@@ -357,6 +435,9 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
 
     def audio_data_updated(self, data):
         self._stepper.audio(data, timeit.default_timer())
+        if self.on_auto:
+            lows = data.lows_power()
+            self._energy = float(self._energy_filter.update(float(lows)))
 
     def render(self):
         now = self.now

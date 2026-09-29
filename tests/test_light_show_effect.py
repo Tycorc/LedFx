@@ -56,6 +56,10 @@ class FakeAudio:
         self.beat = False
         self.bass = False
         self.onset_now = False
+        self.lows = 0.0
+
+    def lows_power(self, filtered=True):
+        return self.lows
 
     def bar_oscillator(self):
         return self.bar
@@ -459,3 +463,82 @@ def test_config_update_keeps_the_lit_lamps_when_the_lamp_count_is_unchanged():
     effect.update_config({"zones": 2})
     assert effect._zone_count == 2
     assert len(effect._lit_now) == 2
+
+
+# -------------------------------------------------------------- auto mode
+
+
+def test_auto_settings_resolve_to_concrete_values():
+    effect = make_effect(
+        pixel_count=4, pattern="auto", envelope="auto", color_mode="auto"
+    )
+    assert effect.on_auto
+    assert effect.pattern in LightShowEffect.AUTO_QUIET_PATTERNS
+    assert effect.envelope in LightShowEffect.AUTO_QUIET_ENVELOPES
+    assert effect.color_mode in LightShowEffect.AUTO_COLOR_MODES
+    for _ in range(3):
+        pixels = step(effect)
+        assert pixels.shape == (4, 3)
+
+
+def test_auto_changes_every_auto_steps():
+    effect = make_effect(
+        pixel_count=4,
+        pattern="auto",
+        envelope="auto",
+        color_mode="auto",
+        auto_steps=4,
+    )
+    before = (effect.pattern, effect.envelope, effect.color_mode)
+    # The first step already ran at activation, three more stay put
+    for _ in range(2):
+        step(effect)
+        assert (effect.pattern, effect.envelope, effect.color_mode) == before
+    step(effect)
+    after = (effect.pattern, effect.envelope, effect.color_mode)
+    assert after != before
+    assert after[0] != before[0]
+    assert after[1] != before[1]
+    assert after[2] != before[2]
+
+
+def test_auto_picks_the_loud_set_on_loud_music():
+    effect = make_effect(
+        pixel_count=4, pattern="auto", envelope="auto", auto_steps=1
+    )
+    audio = FakeAudio()
+    audio.lows = 1.0
+    for _ in range(100):
+        effect.audio_data_updated(audio)
+    assert effect._energy >= LightShowEffect.AUTO_LOUD_LEVEL
+    picks = set()
+    for _ in range(30):
+        step(effect)
+        assert effect.pattern in LightShowEffect.AUTO_LOUD_PATTERNS
+        assert effect.envelope in LightShowEffect.AUTO_LOUD_ENVELOPES
+        picks.add(effect.pattern)
+    assert len(picks) > 1
+
+
+def test_fixed_settings_are_left_alone_by_auto():
+    effect = make_effect(
+        pixel_count=4,
+        pattern="cycle",
+        envelope="auto",
+        color_mode="per lamp",
+        auto_steps=1,
+    )
+    for _ in range(5):
+        step(effect)
+        assert effect.pattern == "cycle"
+        assert effect.color_mode == "per lamp"
+        assert effect.envelope != "auto"
+
+
+def test_without_auto_no_energy_is_tracked():
+    effect = make_effect(pixel_count=4, pattern="cycle")
+    assert not effect.on_auto
+    audio = FakeAudio()
+    audio.lows = 1.0
+    effect.audio_data_updated(audio)
+    assert effect._energy == 0.0
