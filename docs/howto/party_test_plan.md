@@ -78,7 +78,14 @@ Hue zone, Light order `Along the strips`, one genre preset at a time.
 | `Confetti Burst`. | Random lamps flash on the high accents, never more than about three flashes a second per lamp. |
 | Flash Limit off vs on with `Tyc Scatter Strobe`. | With the limit on, no lamp flashes more than about three times a second even at four steps per beat. |
 | No beat for five seconds. | The timer takes over at the Timer BPM, the show keeps moving. |
-| Spatial families (`Room Chase`, `Centre Ring`, `Front Wash` if present). | Movement follows the room positions: the ring really starts at the room centre, the wash crosses the room along the heading. |
+| `Room Chase`. | The chase goes clockwise seen from above starting at the lamp nearest the front. If it goes the wrong way, check the x/y in the Hue app; `direction: reverse` is the workaround. |
+| `Centre Ring`. | The lamps nearest the room centre light first, strip segments in the middle of the room before the wall bulbs. With every lamp on the walls they pulse together: expected. |
+| `Front Wash` (heading 0) and `Aurora Roll` / `Side Scan` (heading 90, alternate). | Front Wash rolls from the back wall to the TV. The others run left to right and visibly come back the other way on the alternate events. |
+| `Tyc Thunder` and `Storm Front`. | A strike reads as one white hit with a stutter, then a violet fade over a faint blue base. If the flicker is invisible on bulbs raise Hold to 0.25; if the base glow is too visible at night, say so. Storm Front never blacks a lamp out mid strike. |
+| `Sky Burst`. | One lamp pops, its neighbours follow a quarter beat later and dimmer, the tail shimmers; the origin never repeats back to back. Note if the sparkle is too nervous on bulbs. |
+| `Band Meter`. | Red lamps pump on kicks, blue on hats, a faint glow at the floor. Raise Sensitivity if lazy, Threshold if quiet passages still glow. |
+| `Star Scatter`. | The lit lamps are spread around the room, no cluster of neighbours, changing from beat to beat. |
+| Release times at your tempo. | Sky Burst (1.5 beats) and lightning (0.75 beats) were chosen at about 120 BPM; note whether they feel long or short. |
 
 ## Light Show
 

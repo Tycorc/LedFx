@@ -64,6 +64,7 @@ With `beat bursts`, a burst that is still running when the next step comes is cu
 | Strobe Color     | The colour of the flashes in `strobe color` mode.                                                |
 | Gate             | When the strobe runs, see [Gates](#gates).                                                       |
 | Trigger, Steps Per Beat, Timer BPM | The steps for `beat bursts`, as in [Rave](rave.md#trigger).                    |
+| Lead (advanced)                    | Seconds the steps fire ahead of the predicted beat, so slow lamps burst on the beat; about 0.05 to 0.1 for a Hue zone. |
 | Burst Flashes    | Flashes per step for `beat bursts`, 1 to 16.                                                     |
 | Threshold        | The band level the `level` gate needs, 0 to 1.                                                   |
 | Band             | The frequency band the level gate listens to: `Full`, `Bass`, `Mids` or `High`.                  |

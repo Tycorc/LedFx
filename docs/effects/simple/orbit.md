@@ -55,6 +55,8 @@ Lamps that a mode leaves unlit are not simply off: they show their field colour,
 
 **Trigger**, **Steps Per Beat** and **Timer BPM** work as in [Rave](rave.md#trigger). Every step starts an event in the stepped modes, and the measured time between steps sets the beat period the continuous modes turn to, so the room stays in time with the music at any tempo. When no beat is heard for five seconds the timer takes over.
 
+**Lead** (advanced) fires every step up to 0.3 s ahead of the predicted beat, so that slow lamps light on the beat rather than after it. A Hue zone wants about 0.05 to 0.1 s. It only applies to the audio triggers, the timer is left alone.
+
 ## Reactive Settings
 
 **Band**, **Reactive Depth** and **Sensitivity** work as in [Party](party.md#reactive-settings): with a reactive depth above 0 the brightness of the whole field follows the level of the chosen band, so quiet passages dim the room and accents bring it back.

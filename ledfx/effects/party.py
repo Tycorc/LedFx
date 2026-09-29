@@ -8,6 +8,14 @@ import voluptuous as vol
 from ledfx.color import parse_color, validate_color
 from ledfx.effects.audio import AudioReactiveEffect
 from ledfx.effects.gradient import GradientEffect
+from ledfx.effects.utils.layout import (
+    LAYOUTS,
+    angles,
+    heading_vector,
+    project,
+    resolve_positions,
+    zone_positions,
+)
 from ledfx.effects.utils.step_trigger import StepTrigger, step_trigger_schema
 
 # Colour envelope shapes for the adsr family. Each channel is
@@ -124,24 +132,34 @@ def hash01(seed, keys, event):
 
 class PartyEffect(AudioReactiveEffect, GradientEffect):
     """
-    Effect families of the "Party" show engine in Hue apps such as
-    hueDynamic, driven by the beat tracker instead of a fixed BPM.
+    A show engine for a room of lamps, driven by the beat tracker.
 
     Every step (a beat, or a fraction or multiple of one) starts an event.
     Each event plays an envelope, attack / hold / release in beats, and a
     family kernel decides how strongly each lamp takes part in it and which
     palette colour it shows:
 
-    - adsr:     every lamp plays a colour envelope over one step
-    - chase:    the envelope runs from lamp to lamp along the light order
-    - radial:   a ring that spreads out from an origin
-    - wash:     soft colour waves rolling along the lamps
-    - scan:     a bright line bouncing back and forth
-    - streak:   a comet with a fading trail, only some of the time
-    - twinkle:  random lamps light up on every step
-    - breathe:  the whole room breathes as one
-    - gate:     a wash that opens with the music level
-    - burst:    random lamps flash when the band accents
+    - adsr:      every lamp plays a colour envelope over one step
+    - chase:     the envelope runs from lamp to lamp along the light order
+    - radial:    a ring that spreads out from an origin
+    - wash:      soft colour waves rolling across the room
+    - scan:      a bright line bouncing back and forth
+    - streak:    a comet with a fading trail, only some of the time
+    - twinkle:   random lamps light up on every step
+    - breathe:   the whole room breathes as one
+    - gate:      a wash that opens with the music level
+    - burst:     random lamps flash when the band accents
+    - lightning: white strikes with a flicker and a coloured after-glow on
+                 random lamps, over a dim storm glow
+    - fireworks: a burst on one lamp that spreads to its neighbours and
+                 fades with a sparkle
+    - pulse:     every lamp is a level meter for its frequency band
+
+    When the lamps' positions are known (a Hue entertainment zone, or a
+    Ring / Line / Grid layout) the movements are spatial: the chase can run
+    around the room by angle, the ring spreads from the real centre of the
+    room, washes, scans and streaks travel along a heading, and twinkles
+    and bursts pick lamps spread over the room.
 
     With reactive depth above zero the brightness follows the level of a
     frequency band, so quiet passages dim the show and accents punch it.
@@ -154,6 +172,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
     HIDDEN_KEYS = ["gradient_roll"]
     ADVANCED_KEYS = AudioReactiveEffect.ADVANCED_KEYS + [
         "zones",
+        "layout",
         "order",
         "origin",
         "radius",
@@ -175,10 +194,13 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
         "breathe",
         "gate",
         "burst",
+        "lightning",
+        "fireworks",
+        "pulse",
     ]
     CURVES = ["cut", "linear", "ease in", "ease out", "ease in out"]
     DIRECTIONS = ["forward", "reverse", "alternate", "random"]
-    ORDERS = ["Position", "Random"]
+    ORDERS = ["Position", "Room", "Heading", "Random"]
     BANDS = ["Full", "Bass", "Mids", "High"]
 
     AUTO_ZONE_PIXEL_LIMIT = 32
@@ -193,12 +215,34 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
     LEVEL_RELEASE = 0.22
     # Band edges in Hz for the reactive levels
     BAND_EDGES = [(20, 250), (250, 3000), (3000, 9000)]
+    # Reactive depth the gate and burst families use while the setting is 0
+    GATE_DEPTH = 0.8
+    BURST_DEPTH = 0.6
+    # lightning: a strike is one to three flashes of FLICKER_ON seconds with
+    # FLICKER_DIP seconds between them. The dips only fall to FLICKER_LEVEL,
+    # so the flash limiter counts a whole strike as one flash
+    FLICKER_ON = 0.08
+    FLICKER_DIP = 0.06
+    FLICKER_LEVEL = 0.6
+    # lightning: the dim glow between strikes and its slow wobble
+    GLOW_BASE = 0.12
+    GLOW_WOBBLE = 0.06
+    # fireworks: how much dimmer the farthest lamps burn, and the sparkle
+    # that shimmers in the fading tail
+    SPREAD_FALLOFF = 0.65
+    SPARKLE_SLOT = 0.1
+    SPARKLE_DEPTH = 0.35
+    # pulse: brightness of a lamp whose band is silent
+    METER_FLOOR = 0.05
+    # twinkle, burst and lightning with positions: how far, as a share of
+    # the lamp spacing, a spread pick may wander from the evenly spread set
+    SPREAD_JITTER = 0.6
 
     CONFIG_SCHEMA = vol.Schema(
         {
             vol.Optional(
                 "family",
-                description="Which kind of show: adsr colour envelopes, chase, radial ring, wash, scan, streak, twinkle, breathe, volume gate or burst",
+                description="Which kind of show: adsr colour envelopes, chase, radial ring, wash, scan, streak, twinkle, breathe, volume gate, burst, lightning, fireworks or pulse meters",
                 default="chase",
             ): vol.In(FAMILIES),
             vol.Optional(
@@ -241,7 +285,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
             ): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=8.0)),
             vol.Optional(
                 "stagger",
-                description="chase: delay between one lamp and the next in beats",
+                description="chase: delay between one lamp and the next in beats. fireworks: delay before the farthest lamp joins the burst",
                 default=0.125,
             ): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=4.0)),
             vol.Optional(
@@ -251,27 +295,37 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
             ): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=8.0)),
             vol.Optional(
                 "probability",
-                description="twinkle, streak and burst: chance that a lamp or an event takes part",
+                description="twinkle, lightning, streak, fireworks and burst: chance that a lamp or an event takes part",
                 default=1.0,
             ): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=1.0)),
             vol.Optional(
+                "heading",
+                description="wash, scan and streak: direction of travel in degrees, 0 towards the front of the room, 90 towards the right. Also the axis of the Heading light order and of the radial origin",
+                default=90,
+            ): vol.All(vol.Coerce(float), vol.Range(min=0, max=359)),
+            vol.Optional(
                 "origin",
-                description="radial: where along the lamps the ring starts, 0 first lamp, 1 last lamp",
+                description="radial: where the ring starts. With positions: 0.5 the centre of the room, 0 and 1 the two ends of the room along the heading. Without: 0 the first lamp, 1 the last",
                 default=0.5,
             ): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=1.0)),
             vol.Optional(
                 "radius",
-                description="radial: how far the ring travels. wash: how wide the waves are",
+                description="radial and fireworks: how far the ring or the burst travels. wash: how wide the waves are",
                 default=1.0,
             ): vol.All(vol.Coerce(float), vol.Range(min=0.05, max=1.0)),
             vol.Optional(
                 "order",
-                description="Light order used by chase, scan and streak",
+                description="Light order used by chase, scan, streak and pulse: the pixel order, around the room by angle, along the heading, or shuffled",
                 default="Position",
             ): vol.In(ORDERS),
             vol.Optional(
+                "layout",
+                description="Where the lamps are: Auto uses the device positions when known, else a ring. Ring, Line or Grid force a layout",
+                default="Auto",
+            ): vol.In(LAYOUTS),
+            vol.Optional(
                 "band",
-                description="Frequency band the reactive level listens to",
+                description="Frequency band the reactive level listens to. pulse: Full splits the lamps between bass, mids and high",
                 default="Full",
             ): vol.In(BANDS),
             vol.Optional(
@@ -281,7 +335,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
             ): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=1.0)),
             vol.Optional(
                 "threshold",
-                description="gate and burst: level the band must exceed",
+                description="gate, burst and pulse: level the band must exceed",
                 default=0.2,
             ): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=0.99)),
             vol.Optional(
@@ -317,6 +371,8 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
         self._events = []  # (start time, index)
         self._event_index = -1
         self._last_burst = -np.inf
+        self._fire_origins = {}
+        self._spread_cache = {}
         self._band_masks = None
         self._band_freq_count = 0
         self._levels = np.zeros(4)  # full, bass, mids, high
@@ -339,6 +395,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
         self.probability = self._config["probability"]
         self.origin = self._config["origin"]
         self.radius = self._config["radius"]
+        self.heading = self._config["heading"]
         self.band = self.BANDS.index(self._config["band"])
         self.reactive_depth = self._config["reactive_depth"]
         self.threshold = self._config["threshold"]
@@ -369,6 +426,53 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
         zones = max(1, min(zones, pixel_count))
         self._zone_count = zones
         self._zone_of_pixel = (np.arange(pixel_count) * zones) // pixel_count
+        self._place_lamps(pixel_count)
+
+    def _place_lamps(self, pixel_count):
+        """
+        Where every lamp (zone) stands in the room.
+
+        Real device positions and the explicit Ring / Line / Grid layouts
+        make the effect spatial. When Auto has to fall back to a synthetic
+        layout, for a strip without positions, the movements keep running
+        along the light order instead, which is what a strip wants.
+        """
+        n = self._zone_count
+        layout = self._config["layout"]
+        positions, source = resolve_positions(
+            layout, pixel_count, self._virtual, self._ledfx
+        )
+        positions = np.asarray(positions, dtype=float)
+        if len(positions) != n:
+            positions = zone_positions(positions, self._zone_of_pixel, n)
+        # Device coordinates are kept as placed, with the room centre at
+        # 0, 0, so a ring from the centre starts in the middle of the room
+        farthest = float(np.abs(positions).max()) if len(positions) else 0.0
+        if farthest > 1.0:
+            positions = positions / farthest
+        self._positions = positions
+        self._layout_source = source
+        self._spatial = source == "device" or layout != "Auto"
+        self._angles = angles(positions)
+
+        raw = project(positions, self.heading)
+        self._proj_raw = raw
+        low, high = float(raw.min()), float(raw.max())
+        if high - low > 1e-9:
+            self._proj = (raw - low) / (high - low)
+        else:
+            self._proj = np.full(n, 0.5)
+
+        # The ring origin lies on the heading axis through the room centre:
+        # 0.5 is the centre, 0 and 1 the two ends of the room
+        t = self.origin
+        along = low * (1.0 - 2.0 * t) if t < 0.5 else high * (2.0 * t - 1.0)
+        forward = heading_vector(self.heading)
+        point = np.array([forward[0] * along, forward[1] * along, 0.0])
+        self._origin_distance = np.linalg.norm(positions - point, axis=1)
+        self._spatial_distance = np.linalg.norm(
+            positions[:, None, :] - positions[None, :, :], axis=2
+        )
 
     def _reset_lamps(self):
         n = self._zone_count
@@ -379,12 +483,92 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
     def _order_lamps(self):
         """Rank of every lamp in the light order, and its position 0..1."""
         n = self._zone_count
-        if self._config["order"] == "Random":
-            self._rank = np.argsort(hash01(self._seed, np.arange(n) + 1, 0))
-            self._rank = np.argsort(self._rank)
+        order = self._config["order"]
+        if order == "Random":
+            key = hash01(self._seed, np.arange(n) + 1, 0)
+        elif order == "Room" and self._spatial:
+            key = self._angles
+        elif order == "Heading" and self._spatial:
+            key = self._proj_raw
         else:
-            self._rank = np.arange(n)
+            key = np.arange(n)
+        self._rank = np.argsort(np.argsort(key, kind="stable"), kind="stable")
         self._position = self._rank / max(1, n - 1)
+        # Lamp to lamp distance, 1 for the lamp farthest from each one
+        if self._spatial:
+            distance = self._spatial_distance
+        else:
+            distance = np.abs(
+                self._position[:, None] - self._position[None, :]
+            )
+        far = distance.max(axis=1, keepdims=True)
+        self._lamp_distance = distance / np.where(far > 1e-9, far, 1.0)
+        # Spread picks may wander by this much of the lamp spacing, so the
+        # same few lamps do not take every event on a symmetric layout
+        nearest = np.where(distance > 1e-9, distance, np.inf).min(axis=1)
+        nearest = nearest[np.isfinite(nearest)]
+        spacing = float(np.median(nearest)) if len(nearest) else 0.0
+        self._spread_jitter = self.SPREAD_JITTER * spacing
+        self._spread_cache = {}
+
+    def _spread_pick(self, probability, event):
+        """
+        Lamps taking part in an event, spread over the room.
+
+        Starting from a lamp chosen by the event, every next lamp is the
+        one farthest from all the lamps picked so far, so any number of
+        them covers the room evenly rather than clustering.
+        """
+        n = self._zone_count
+        roll = hash01(self._seed, [n + 1, n + 2], event)
+        count = int(np.floor(probability * n + roll[0]))
+        if count <= 0:
+            return np.zeros(n, dtype=bool)
+        if count >= n:
+            return np.ones(n, dtype=bool)
+        key = (event, count)
+        lit = self._spread_cache.get(key)
+        if lit is not None:
+            return lit
+        jitter = hash01(self._seed, np.arange(n) + 1, event * 31 + 5)
+        distance = self._spatial_distance + jitter[None, :] * (
+            self._spread_jitter + 1e-6
+        )
+        chosen = [int(np.floor(roll[1] * n)) % n]
+        nearest = distance[chosen[0]].copy()
+        for _ in range(count - 1):
+            nearest[chosen] = -1.0
+            pick = int(np.argmax(nearest))
+            chosen.append(pick)
+            nearest = np.minimum(nearest, distance[pick])
+        lit = np.zeros(n, dtype=bool)
+        lit[chosen] = True
+        if len(self._spread_cache) > 32:
+            self._spread_cache.clear()
+        self._spread_cache[key] = lit
+        return lit
+
+    def _pick_origin(self, event):
+        """A lamp for a fireworks event, never the one of the event before."""
+        n = self._zone_count
+        roll = float(hash01(self._seed, [n + 5], event)[0])
+        last = self._fire_origins.get(event - 1)
+        if n > 1 and last is not None:
+            return (last + 1 + int(roll * (n - 1))) % n
+        return int(roll * n) % n
+
+    def _fire_origin(self, event):
+        """The lamp a fireworks event bursts from."""
+        origin = self._fire_origins.get(event)
+        if origin is None:
+            origin = self._pick_origin(event)
+            self._fire_origins[event] = origin
+        return origin
+
+    def _flash_count(self, event):
+        """How many flashes a lightning strike has, one to three."""
+        n = self._zone_count
+        return 1 + int(hash01(self._seed, [n + 3], event)[0] * 3)
 
     # ---------------------------------------------------------------- audio
 
@@ -456,11 +640,21 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
             self._last_burst = now
         self._event_index += 1
         self._events.append((now, self._event_index))
+        if self.family == "fireworks":
+            # Resolve the previous origin first (it may not have been
+            # rendered yet) so that this one is never the same lamp
+            if self._event_index > 0:
+                self._fire_origin(self._event_index - 1)
+            self._fire_origins[self._event_index] = self._pick_origin(
+                self._event_index
+            )
 
     def _prune_events(self, now):
         keep = self._envelope_length()
         if self.family == "chase":
             keep += self.stagger * self._beat_period() * self._zone_count
+        elif self.family == "fireworks":
+            keep += self.stagger * self._beat_period()
         elif self.family == "adsr":
             keep = self._stepper.step_interval
         self._events = [
@@ -468,6 +662,13 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
             for start, index in self._events
             if now - start < keep + 0.05
         ]
+        if len(self._fire_origins) > 64:
+            newest = max(self._fire_origins)
+            self._fire_origins = {
+                index: origin
+                for index, origin in self._fire_origins.items()
+                if index >= newest - 8
+            }
 
     def _reversed(self, event):
         if self.direction == "reverse":
@@ -503,6 +704,20 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
             )
         return out
 
+    def _lamp_ages(self, event, age):
+        """Age of an event as every lamp sees it, after its own delay."""
+        n = self._zone_count
+        beat = self._beat_period()
+        if self.family == "chase":
+            rank = (
+                (n - 1 - self._rank) if self._reversed(event) else self._rank
+            )
+            return age - rank * self.stagger * beat
+        if self.family == "fireworks":
+            distance = self._lamp_distance[self._fire_origin(event)]
+            return age - distance * self.stagger * beat
+        return np.full(n, float(age))
+
     # -------------------------------------------------------------- kernels
 
     @staticmethod
@@ -514,17 +729,41 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
     def _raised_cosine(phase):
         return (np.cos((phase % 1.0) * 2.0 * np.pi) + 1.0) / 2.0
 
-    def _kernel(self, event, progress, envelope_length):
+    def _axis_position(self, reverse):
+        """Where every lamp lies along the movement axis, 0..1."""
+        if self._spatial:
+            position = self._proj
+        else:
+            position = self._position
+        return (1.0 - position) if reverse else position
+
+    def _ring_distance(self):
+        """Distance of every lamp from the ring origin, 1 at the ring's reach."""
+        if self._spatial:
+            # The ring starts at the nearest lamp and reaches the farthest,
+            # so a zone with every lamp on the walls pulses as one instead
+            # of waiting for a ring that arrives as the envelope fades
+            distance = self._origin_distance - self._origin_distance.min()
+            extent = float(distance.max())
+        else:
+            origin = self.origin
+            distance = np.abs(self._position - origin)
+            extent = max(origin, 1.0 - origin)
+        return distance / (max(0.05, self.radius) * max(extent, 1e-6))
+
+    def _kernel(
+        self, event, progress, envelope_length, age=0.0, envelope=None
+    ):
         """
         Strength and palette position of every lamp for one event.
 
-        progress: age / envelope length of the event, 0..1 (before any
-        per lamp stagger, which is applied by the caller for chase).
+        progress: age / envelope length of the event, 0..1, and age the
+        same in seconds (before any per lamp delay, which the caller
+        applies for chase and fireworks).
         """
         n = self._zone_count
         reverse = self._reversed(event)
         rank = (n - 1 - self._rank) if reverse else self._rank
-        position = rank / max(1, n - 1)
         p = (1.0 - progress) if reverse else progress
         family = self.family
 
@@ -532,18 +771,16 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
             return np.ones(n), (rank + event) / n
 
         if family == "radial":
-            origin = self.origin
-            extent = max(origin, 1.0 - origin)
-            distance = np.abs(self._position - origin) / (
-                max(0.05, self.radius) * extent
-            )
+            distance = self._ring_distance()
             strength = 1.0 - self._smoothstep(0.12, 0.45, np.abs(distance - p))
             return strength, distance + p
 
         if family in ("wash", "gate"):
             gated = family == "gate"
             spread = 1.0 if gated else max(0.08, self.radius)
-            phase = position / spread - p + event * 0.11
+            # Only the progress reverses, so a reversed wave really runs
+            # the other way
+            phase = self._axis_position(False) / spread - p + event * 0.11
             lobes = np.maximum(
                 self._raised_cosine(phase),
                 np.maximum(
@@ -557,6 +794,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
             return strength, phase
 
         if family == "scan":
+            position = self._axis_position(reverse)
             head = 1.0 - abs(p * 2.0 - 1.0)
             width = np.clip(
                 self.trail * self._beat_period() / envelope_length, 0.035, 0.7
@@ -568,6 +806,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
             roll = float(hash01(self._seed, [0], event)[0])
             if roll > self.probability:
                 return np.zeros(n), np.full(n, roll)
+            position = self._axis_position(reverse)
             width = np.clip(
                 self.trail * self._beat_period() / envelope_length, 0.03, 0.95
             )
@@ -581,17 +820,53 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
 
         if family == "twinkle":
             roll = hash01(self._seed, np.arange(n) + 1, event)
-            return (
-                np.where(roll <= self.probability, 1.0, 0.0),
-                roll + event * 0.07,
-            )
+            if self._spatial:
+                lit = self._spread_pick(self.probability, event)
+            else:
+                lit = roll <= self.probability
+            return np.where(lit, 1.0, 0.0), roll + event * 0.07
 
         if family == "burst":
             roll = hash01(self._seed, np.arange(n) + 1, event * 17)
-            return (
-                np.where(roll < self.probability, 1.0, 0.0),
-                roll + event * 0.31,
+            if self._spatial:
+                lit = self._spread_pick(self.probability, event * 17)
+            else:
+                lit = roll < self.probability
+            return np.where(lit, 1.0, 0.0), roll + event * 0.31
+
+        if family == "lightning":
+            roll = hash01(self._seed, np.arange(n) + 1, event)
+            if self._spatial:
+                lit = self._spread_pick(self.probability, event)
+            else:
+                lit = roll <= self.probability
+            slot = self.FLICKER_ON + self.FLICKER_DIP
+            flicker = 1.0
+            if 0.0 <= age < self._flash_count(event) * slot:
+                if (age % slot) >= self.FLICKER_ON:
+                    flicker = self.FLICKER_LEVEL
+            return np.where(lit, flicker, 0.0), roll * 0.5 + event * 0.13
+
+        if family == "fireworks":
+            roll = float(hash01(self._seed, [0], event)[0])
+            if roll > self.probability:
+                return np.zeros(n), np.full(n, roll)
+            distance = self._lamp_distance[self._fire_origin(event)]
+            within = distance <= max(0.05, self.radius) + 1e-9
+            falloff = 1.0 - self.SPREAD_FALLOFF * distance**0.7
+            # The sparkle only shimmers once a lamp has faded below half,
+            # so it never lifts a lamp back to bright
+            ages = np.maximum(self._lamp_ages(event, age), 0.0)
+            slot = np.floor(ages / self.SPARKLE_SLOT).astype(np.int64)
+            noise = hash01(
+                self._seed, np.arange(n) + 1 + (slot + 1) * (n + 1), event * 29
             )
+            level = np.ones(n) if envelope is None else envelope
+            fading = np.clip((0.5 - level) / 0.5, 0.0, 1.0)
+            sparkle = 1.0 - self.SPARKLE_DEPTH * noise * fading
+            strength = np.where(within, falloff * sparkle, 0.0)
+            tint = float(hash01(self._seed, [n + 6], event)[0])
+            return strength, tint + 0.15 * distance
 
         # breathe
         return np.ones(n), np.full(n, progress + event * 0.17)
@@ -605,10 +880,12 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
         if self.family in ("gate", "burst"):
             floor = min(0.99, self.threshold)
             level = max(0.0, (level - floor) / (1.0 - floor))
-            if self.family == "gate":
-                depth = max(depth, 0.8)
-            else:
-                depth = max(depth, 0.6)
+            if depth <= 0.0:
+                depth = (
+                    self.GATE_DEPTH
+                    if self.family == "gate"
+                    else self.BURST_DEPTH
+                )
         return 1.0 - depth + level * depth
 
     def _limit_flashes(self, brightness, now):
@@ -646,36 +923,57 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
         color = rgb / peak * 255.0
         return np.tile(color * peak, (n, 1))
 
+    def _render_pulse(self):
+        """Every lamp is a level meter for its band."""
+        n = self._zone_count
+        levels = np.clip(self._levels, 0.0, 1.0)
+        if self.band == 0:
+            lamp_band = self._rank % 3
+        else:
+            lamp_band = np.full(n, self.band - 1)
+        level = levels[lamp_band + 1]
+        floor = min(0.99, self.threshold)
+        level = np.clip((level - floor) / (1.0 - floor), 0.0, 1.0)
+        brightness = self.METER_FLOOR + (1.0 - self.METER_FLOOR) * level
+        palette = (lamp_band + 0.5) / 3.0 + self._event_index / 12.0
+        colors = self.get_gradient_color_vectorized1d(palette % 1.0)
+        return colors, brightness
+
+    def _storm_glow(self, colors, strike, brightness, scale, now):
+        """Lightning: white at full strength, the palette in the after-glow,
+        and a dim wobbling glow of the palette between strikes."""
+        n = self._zone_count
+        keys = np.arange(n) + 1
+        white = np.clip((strike - 0.25) / 0.35, 0.0, 1.0)[:, None]
+        colors = colors + (255.0 - colors) * white
+        period = 0.4 + 0.2 * hash01(self._seed, keys, 3)
+        wobble = self._raised_cosine(
+            now / period + hash01(self._seed, keys, 4)
+        )
+        glow = (self.GLOW_BASE + self.GLOW_WOBBLE * wobble) * scale
+        glow_colors = self.get_gradient_color_vectorized1d(
+            hash01(self._seed, keys, 5)
+        )
+        dim = brightness < glow
+        colors = np.where(dim[:, None], glow_colors, colors)
+        return colors, np.maximum(brightness, glow)
+
     def _render_families(self, now):
         n = self._zone_count
-        beat = self._beat_period()
         length = max(0.05, self._envelope_length())
         best = np.zeros(n)
         best_event = np.full(n, -1)
         palette = np.zeros(n)
         for start, event in self._events:
             age = now - start
-            if self.family == "chase":
-                rank = (
-                    (n - 1 - self._rank)
-                    if self._reversed(event)
-                    else self._rank
-                )
-                age = age - rank * self.stagger * beat
-            else:
-                age = np.full(n, age)
-            envelope = self._envelope(age)
+            ages = self._lamp_ages(event, age)
+            envelope = self._envelope(ages)
             if not np.any(envelope > 0.0):
                 continue
-            progress = (
-                float(np.clip(np.max(age) / length, 0.0, 1.0))
-                if self.family != "chase"
-                else None
+            progress = float(np.clip(age / length, 0.0, 1.0))
+            strength, pos = self._kernel(
+                event, progress, length, age, envelope
             )
-            if self.family == "chase":
-                strength, pos = self._kernel(event, 0.0, length)
-            else:
-                strength, pos = self._kernel(event, progress, length)
             value = np.clip(envelope * strength, 0.0, 1.0)
             better = (value > best) | (
                 (np.abs(value - best) < 1e-6)
@@ -686,8 +984,13 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
             palette = np.where(better, pos, palette)
             best_event = np.where(better, event, best_event)
 
-        brightness = best * self._trigger_strength()
+        scale = self._trigger_strength()
+        brightness = best * scale
         colors = self.get_gradient_color_vectorized1d(palette % 1.0)
+        if self.family == "lightning":
+            colors, brightness = self._storm_glow(
+                colors, best, brightness, scale, now
+            )
         return colors, brightness
 
     def render(self):
@@ -704,7 +1007,10 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
                 scale = np.where(brightness > 0, limited / brightness, 0.0)
             out = out * scale[:, None]
         else:
-            colors, brightness = self._render_families(now)
+            if self.family == "pulse":
+                colors, brightness = self._render_pulse()
+            else:
+                colors, brightness = self._render_families(now)
             brightness = self._limit_flashes(brightness, now)
             out = colors * brightness[:, None]
 
