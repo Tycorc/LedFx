@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from json import JSONDecodeError
+from typing import ClassVar
 
 from aiohttp import web
 
@@ -12,7 +13,7 @@ _LOGGER = logging.getLogger(__name__)
 class InfoEndpoint(RestEndpoint):
     ENDPOINT_PATH = "/api/power"
 
-    exit_codes = {"shutdown": 3, "restart": 4}
+    exit_codes: ClassVar[dict[str, int]] = {"shutdown": 3, "restart": 4}
 
     async def post(self, request: web.Request) -> web.Response:
         """
@@ -37,15 +38,13 @@ class InfoEndpoint(RestEndpoint):
         if timeout is None:
             timeout = 0
 
-        if action not in self.exit_codes.keys():
+        if action not in self.exit_codes:
             return await self.invalid_request(
                 f"Action {action} not in {list(self.exit_codes.keys())}"
             )
 
         if timeout < 0 or not isinstance(timeout, int):
-            return await self.invalid_request(
-                "Timeout must be a positive integer"
-            )
+            return await self.invalid_request("Timeout must be a positive integer")
 
         # This is an ugly hack.
         # We probably should have a better way of doing this but o well.

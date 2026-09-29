@@ -16,10 +16,7 @@ BASS = (FREQS >= 40) & (FREQS <= 180)
 VOICE = (FREQS >= 220) & (FREQS <= 2000)
 TREBLE = (FREQS >= 3000) & (FREQS <= 12000)
 
-RED_BLUE = (
-    "linear-gradient(90deg, #ff0000 0%, #ff0000 50%, "
-    "#0000ff 50%, #0000ff 100%)"
-)
+RED_BLUE = "linear-gradient(90deg, #ff0000 0%, #ff0000 50%, #0000ff 50%, #0000ff 100%)"
 
 
 def make_effect(pixel_count=6, **config):
@@ -263,9 +260,7 @@ def test_hold_style_keeps_full_brightness():
 
 
 def test_fade_and_pulse_alternates_in_blocks():
-    effect = make_effect(
-        pixel_count=3, bass_style="Fade + pulse", pulse_block=4
-    )
+    effect = make_effect(pixel_count=3, bass_style="Fade + pulse", pulse_block=4)
     warm_up(effect)
     fades = []
     for i in range(8):
@@ -275,9 +270,7 @@ def test_fade_and_pulse_alternates_in_blocks():
     # two are beat length fades, then the block turns over to pulses
     assert fades[0] == pytest.approx(DiscoEffect.FADE_CAP)
     assert all(fade == pytest.approx(0.5) for fade in fades[1:3])
-    assert all(
-        fade == pytest.approx(DiscoEffect.PULSE_FADE) for fade in fades[3:7]
-    )
+    assert all(fade == pytest.approx(DiscoEffect.PULSE_FADE) for fade in fades[3:7])
     assert fades[7] == pytest.approx(0.5)
 
 
@@ -303,9 +296,7 @@ def test_intensity_scales_the_output():
     effect = make_effect(pixel_count=3, intensity=0.5, idle_brightness=0.0)
     warm_up(effect)
     feed(effect, melbank(bass=0.9), 0.0)
-    assert np.allclose(
-        render_at(effect, 0.0)[0], effect._colors[0] * 0.5, atol=1
-    )
+    assert np.allclose(render_at(effect, 0.0)[0], effect._colors[0] * 0.5, atol=1)
 
 
 def test_idle_lamps_drift_to_the_idle_brightness():
@@ -374,9 +365,7 @@ def test_peak_strobe_flashes_then_goes_dark():
 
 
 def test_peak_strobe_is_rate_limited():
-    effect = make_effect(
-        pixel_count=2, mode="Peak", strobe=True, link_lights=True
-    )
+    effect = make_effect(pixel_count=2, mode="Peak", strobe=True, link_lights=True)
     warm_up(effect)
     feed(effect, melbank(bass=0.9), 0.0)
     effect._history[0][:] = 0.02
@@ -409,9 +398,7 @@ def test_palette_thirds_keep_each_channel_in_its_third():
 
 def test_whole_palette_lets_channels_roam():
     effect = make_effect(pixel_count=3, channel_colors="Whole palette")
-    points = {
-        int(effect._next_point(effect._rng.random(), 0) * 3) for _ in range(60)
-    }
+    points = {int(effect._next_point(effect._rng.random(), 0) * 3) for _ in range(60)}
     assert points == {0, 1, 2}
 
 

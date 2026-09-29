@@ -19,7 +19,6 @@ class Overlay:
     def plot_range(self, values, color):
         diag_string = "None"
         if len(values) > 1:
-
             graph_s = 9  # start pixel height under the diag text
             graph_h = max(1, self.r_height - 9 - 1)  # height of graph
 
@@ -36,9 +35,8 @@ class Overlay:
 
             v_range = v_max - v_min
 
-            x = 0
             pixels = self.image.load()
-            for value in reversed(values):
+            for x, value in enumerate(reversed(values)):
                 value_norm = (value - v_min) / v_range
                 y = graph_s + graph_h - (value_norm * graph_h)
                 if y < self.r_height and y >= 0:
@@ -46,13 +44,10 @@ class Overlay:
                         pixels[x, y] = (0, 255, 255)
                     else:
                         pixels[x, y] = color
-                x += 1
-                if x >= self.r_width:
+                if x + 1 >= self.r_width:
                     break
 
-            diag_string = (
-                f"{values[-1]:0.4f} {v_min:0.4f} {v_max:0.4f} {v_range:0.4f}"
-            )
+            diag_string = f"{values[-1]:0.4f} {v_min:0.4f} {v_max:0.4f} {v_range:0.4f}"
         return diag_string
 
     def render(self, m_image, m_draw, values, values2=None, values3=None):

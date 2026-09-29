@@ -1,5 +1,7 @@
 """Unit tests for the section detector shared by the party mode effects."""
 
+import itertools
+
 import pytest
 
 from ledfx.effects.utils.sections import SECTIONS, SectionDetector
@@ -10,7 +12,7 @@ DT = 0.02
 def feed(detector, raw, seconds, start, bar_phase=None):
     """Feed a constant level for a while, returns the end time."""
     t = start
-    steps = int(round(seconds / DT))
+    steps = round(seconds / DT)
     for _ in range(steps):
         t += DT
         detector.update(raw, t, bar_phase)
@@ -127,7 +129,7 @@ def test_palette_changes_every_interval_without_a_bar():
         if detector.palette_changed:
             changes.append(t)
     assert 4 <= len(changes) <= 8
-    gaps = [b - a for a, b in zip(changes, changes[1:])]
+    gaps = [b - a for a, b in itertools.pairwise(changes)]
     assert all(7.5 - DT <= gap <= 12.5 + DT for gap in gaps)
     assert 0.0 <= detector.palette_offset < 1.0
 

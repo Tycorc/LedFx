@@ -1,6 +1,7 @@
 """Rave / party mode effect for a handful of lamps (Hue, LIFX, Nanoleaf...)."""
 
 import timeit
+from typing import ClassVar
 
 import numpy as np
 import voluptuous as vol
@@ -28,7 +29,7 @@ class RaveEffect(AudioReactiveEffect, GradientEffect):
 
     NAME = "Rave"
     CATEGORY = "BPM"
-    HIDDEN_KEYS = ["gradient_roll"]
+    HIDDEN_KEYS: ClassVar[list[str]] = ["gradient_roll"]
     ADVANCED_KEYS = AudioReactiveEffect.ADVANCED_KEYS + [
         "zones",
         "flash_chance",
@@ -36,9 +37,9 @@ class RaveEffect(AudioReactiveEffect, GradientEffect):
         "strobe_flashes",
     ]
 
-    MODES = ["random", "wash", "chase", "alternate", "strobe"]
-    TRIGGERS = ["Beat", "Bass hit", "Onset", "Timer"]
-    STEP_MAPPINGS = {
+    MODES: ClassVar[list[str]] = ["random", "wash", "chase", "alternate", "strobe"]
+    TRIGGERS: ClassVar[list[str]] = ["Beat", "Bass hit", "Onset", "Timer"]
+    STEP_MAPPINGS: ClassVar[dict[str, float]] = {
         "1/4": 0.25,
         "1/2": 0.5,
         "1": 1.0,
@@ -136,12 +137,8 @@ class RaveEffect(AudioReactiveEffect, GradientEffect):
         """Cache validated config values and rebuild zones when needed."""
         self.mode = self._config["mode"]
         self.trigger = self._config["trigger"]
-        self.steps_per_beat = self.STEP_MAPPINGS[
-            self._config["steps_per_beat"]
-        ]
-        self.timer_interval = (
-            60.0 / self._config["timer_bpm"] / self.steps_per_beat
-        )
+        self.steps_per_beat = self.STEP_MAPPINGS[self._config["steps_per_beat"]]
+        self.timer_interval = 60.0 / self._config["timer_bpm"] / self.steps_per_beat
         self.fade = self._config["fade"]
         self.flash_chance = self._config["flash_chance"]
         self.strobe_flashes = self._config["strobe_flashes"]
@@ -227,9 +224,7 @@ class RaveEffect(AudioReactiveEffect, GradientEffect):
         elif mode == "alternate":
             if self._alt_phase == 0:
                 # New pair of colours from opposite ends of the palette
-                self._pair_point = self._next_points(
-                    np.array([self._pair_point])
-                )[0]
+                self._pair_point = self._next_points(np.array([self._pair_point]))[0]
             self._alt_phase ^= 1
             pair = self._pair_colors()
             self._zone_colors[0::2] = pair[self._alt_phase]
@@ -302,9 +297,8 @@ class RaveEffect(AudioReactiveEffect, GradientEffect):
         if (
             self.trigger == "Timer"
             or now - self._last_audio_trigger > self.SILENCE_TIMEOUT
-        ):
-            if now - self._last_step_time >= self.timer_interval:
-                self._step_pending = True
+        ) and now - self._last_step_time >= self.timer_interval:
+            self._step_pending = True
 
         if self._step_pending:
             self._step_pending = False

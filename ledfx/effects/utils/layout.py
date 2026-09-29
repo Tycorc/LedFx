@@ -45,7 +45,7 @@ def grid_positions(count, rows):
     """count lamps on a grid of rows, row 0 at the front, left to right."""
     count = max(1, int(count))
     rows = max(1, min(int(rows), count))
-    columns = int(math.ceil(count / rows))
+    columns = math.ceil(count / rows)
     index = np.arange(count)
     row = index // columns
     column = index % columns
@@ -66,7 +66,7 @@ def device_positions(device):
     """
     try:
         positions = getattr(device, "pixel_positions", None)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
     if positions is None:
         return None
@@ -113,7 +113,7 @@ def virtual_positions(virtual, ledfx):
 
     try:
         mapping = virtual._config.get("mapping", "span")
-    except Exception:
+    except Exception:  # noqa: BLE001
         mapping = "span"
     if mapping == "copy":
         segments = segments[:1]
@@ -140,7 +140,7 @@ def virtual_positions(virtual, ledfx):
 
     group_size = int(getattr(virtual, "group_size", 1) or 1)
     if group_size > 1:
-        groups = int(math.ceil(len(positions) / group_size))
+        groups = math.ceil(len(positions) / group_size)
         positions = np.array(
             [
                 positions[i * group_size : (i + 1) * group_size].mean(axis=0)
@@ -168,7 +168,7 @@ def synthetic_positions(layout, count, rows=1):
         return line_positions(count), "line"
     if layout == "Grid":
         if rows <= 1:
-            rows = max(1, int(round(math.sqrt(count))))
+            rows = max(1, round(math.sqrt(count)))
         return grid_positions(count, rows), "grid"
     if layout == "Auto" and rows > 1 and count > rows:
         return grid_positions(count, rows), "grid"
@@ -188,7 +188,7 @@ def resolve_positions(layout, count, virtual=None, ledfx=None):
     if virtual is not None:
         try:
             rows = int(getattr(virtual, "rows", 1) or 1)
-        except Exception:
+        except Exception:  # noqa: BLE001
             rows = 1
 
     if layout == "Auto" and virtual is not None and ledfx is not None:
@@ -238,9 +238,7 @@ def angles(positions):
     and 0.75 the left: clockwise seen from above.
     """
     positions = np.asarray(positions, dtype=float)
-    turn = (math.pi / 2 - np.arctan2(positions[:, 1], positions[:, 0])) / (
-        2 * math.pi
-    )
+    turn = (math.pi / 2 - np.arctan2(positions[:, 1], positions[:, 0])) / (2 * math.pi)
     return np.mod(turn, 1.0)
 
 

@@ -1,5 +1,6 @@
 """Unit tests for the Orbit effect modes."""
 
+import itertools
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -176,12 +177,8 @@ def test_plane_picks_the_turning_axes():
     # A wall of lamps: x across, z up, all at the same y
     wall = [[0, 1, 1], [1, 1, 0], [0, 1, -1], [-1, 1, 0]]
     virtual, ledfx = fake_room(wall)
-    floor = make_effect(
-        virtual=virtual, ledfx=ledfx, layout="Auto", plane="floor"
-    )
-    front = make_effect(
-        virtual=virtual, ledfx=ledfx, layout="Auto", plane="front wall"
-    )
+    floor = make_effect(virtual=virtual, ledfx=ledfx, layout="Auto", plane="floor")
+    front = make_effect(virtual=virtual, ledfx=ledfx, layout="Auto", plane="front wall")
     # Seen from above the wall is a line, seen from the front it is a ring
     assert np.allclose(front._angles, [0.0, 0.25, 0.5, 0.75])
     assert floor._angles[0] == pytest.approx(floor._angles[2])
@@ -189,18 +186,14 @@ def test_plane_picks_the_turning_axes():
 
     side_wall = [[1, 0, 1], [1, 1, 0], [1, 0, -1], [1, -1, 0]]
     virtual, ledfx = fake_room(side_wall)
-    side = make_effect(
-        virtual=virtual, ledfx=ledfx, layout="Auto", plane="side wall"
-    )
+    side = make_effect(virtual=virtual, ledfx=ledfx, layout="Auto", plane="side wall")
     assert np.allclose(side._angles, [0.0, 0.25, 0.5, 0.75])
 
 
 def test_a_lamp_at_the_centre_rides_with_the_pattern():
     room = [[0, 1, 0], [1, 0, 0], [0, -1, 0], [-1, 0, 0], [0, 0, 0]]
     virtual, ledfx = fake_room(room)
-    effect = make_effect(
-        virtual=virtual, ledfx=ledfx, layout="Auto", mode="swirl"
-    )
+    effect = make_effect(virtual=virtual, ledfx=ledfx, layout="Auto", mode="swirl")
     assert effect._centre[4]
     assert same(render_at(effect, 0.0)[4], RED)
     assert same(render_at(effect, 1.0)[4], RED)
@@ -287,9 +280,7 @@ def test_beacon_lobe_is_bright_at_its_centre_and_dark_at_its_edges():
 
 
 def test_beacon_hard_edge_makes_a_block_half_a_turn_wide():
-    effect = make_effect(
-        pixel_count=16, mode="beacon", sectors=1, softness=0.0
-    )
+    effect = make_effect(pixel_count=16, mode="beacon", sectors=1, softness=0.0)
     lit = levels(render_at(effect, 0.0))
     block = np.isin(np.arange(16), [0, 1, 2, 3, 13, 14, 15])
     assert np.array_equal(lit > 0.5, block)
@@ -343,9 +334,7 @@ def test_sectors_at_full_softness_are_a_smooth_swirl():
     wedges = make_effect(
         pixel_count=8, mode="sectors", sectors=4, softness=1.0, gradient=SMOOTH
     )
-    swirl = make_effect(
-        pixel_count=8, mode="swirl", softness=0.0, gradient=SMOOTH
-    )
+    swirl = make_effect(pixel_count=8, mode="swirl", softness=0.0, gradient=SMOOTH)
     assert np.allclose(render_at(wedges, 0.3), render_at(swirl, 0.3), atol=2)
 
 
@@ -392,9 +381,7 @@ def test_wave_softness_darkens_the_trough():
 
 def test_ripple_runs_outward_or_inward_by_spin():
     outward = make_effect(pixel_count=5, layout="Line", mode="ripple")
-    inward = make_effect(
-        pixel_count=5, layout="Line", mode="ripple", spin="counter"
-    )
+    inward = make_effect(pixel_count=5, layout="Line", mode="ripple", spin="counter")
     start = render_at(outward, 0.0)
     assert same(start[2], RED) and same(start[1], BLUE)
     assert same(start[0], RED)
@@ -569,9 +556,7 @@ def test_heading_turns_the_corner_channels():
 
 def test_corners_light_the_next_channel_every_step():
     effect = make_effect(pixel_count=8, mode="corners", sectors=4)
-    lit = [
-        levels(render_at(effect, t)) > 0.5 for t in (0.5, 1.0, 2.0, 3.0, 4.0)
-    ]
+    lit = [levels(render_at(effect, t)) > 0.5 for t in (0.5, 1.0, 2.0, 3.0, 4.0)]
     assert lit[0].sum() == 2
     for channel in range(4):
         assert np.array_equal(lit[channel], effect._channels == channel)
@@ -579,32 +564,24 @@ def test_corners_light_the_next_channel_every_step():
 
 
 def test_corners_hold_then_fade_by_softness():
-    effect = make_effect(
-        pixel_count=8, mode="corners", sectors=4, softness=0.5
-    )
+    effect = make_effect(pixel_count=8, mode="corners", sectors=4, softness=0.5)
     assert levels(render_at(effect, 0.25)).max() == pytest.approx(1.0)
     assert levels(render_at(effect, 0.75)).max() == pytest.approx(0.5)
-    assert levels(render_at(effect, 0.99)).max() == pytest.approx(
-        0.02, abs=0.01
-    )
+    assert levels(render_at(effect, 0.99)).max() == pytest.approx(0.02, abs=0.01)
 
 
 def test_corners_random_spin_never_repeats_a_channel():
-    effect = make_effect(
-        pixel_count=8, mode="corners", sectors=4, spin="random"
-    )
+    effect = make_effect(pixel_count=8, mode="corners", sectors=4, spin="random")
     channels = [effect._channel]
     for t in range(1, 30):
         render_at(effect, float(t))
         channels.append(effect._channel)
-    assert all(a != b for a, b in zip(channels, channels[1:]))
+    assert all(a != b for a, b in itertools.pairwise(channels))
     assert set(channels) == {0, 1, 2, 3}
 
 
 def test_corners_alternate_spin_bounces_between_the_ends():
-    effect = make_effect(
-        pixel_count=8, mode="corners", sectors=4, spin="alternate"
-    )
+    effect = make_effect(pixel_count=8, mode="corners", sectors=4, spin="alternate")
     channels = [effect._channel]
     for t in range(1, 8):
         render_at(effect, float(t))
@@ -644,9 +621,7 @@ def test_noise_terraces_with_sectors():
     effect = make_effect(pixel_count=16, mode="noise", sectors=4)
     for pixel in render_at(effect, 0.3):
         assert any(same(pixel, colour) for colour in (RED, GREEN, BLUE, WHITE))
-    smooth = make_effect(
-        pixel_count=16, mode="noise", sectors=1, gradient=SMOOTH
-    )
+    smooth = make_effect(pixel_count=16, mode="noise", sectors=1, gradient=SMOOTH)
     pixels = render_at(smooth, 0.3)
     assert np.any((pixels[:, 0] > 20) & (pixels[:, 2] > 20))
 
@@ -693,7 +668,7 @@ def test_scatter_picks_new_clusters_every_step():
     for t in range(1, 6):
         render_at(effect, float(t))
         seen.append(tuple(effect._cluster_lamps))
-    for before, after in zip(seen, seen[1:]):
+    for before, after in itertools.pairwise(seen):
         assert not set(before) & set(after)
     assert all(len(set(lamps)) == 2 for lamps in seen)
 
@@ -746,9 +721,7 @@ def test_audio_updates_feed_the_band_level():
     frame[FREQS < 250] = 0.5
     data = MagicMock()
     data.melbanks.melbanks = [frame]
-    data.melbanks.melbank_processors = [
-        SimpleNamespace(melbank_frequencies=FREQS)
-    ]
+    data.melbanks.melbank_processors = [SimpleNamespace(melbank_frequencies=FREQS)]
     for _ in range(20):
         effect.audio_data_updated(data)
     assert effect._band.level > 0.5
@@ -817,9 +790,7 @@ def audio_data(level, phase=0.0):
     """Audio data with a flat melbank at the given level."""
     data = MagicMock()
     data.melbanks.melbanks = [np.full(len(FREQS), level)]
-    data.melbanks.melbank_processors = [
-        SimpleNamespace(melbank_frequencies=FREQS)
-    ]
+    data.melbanks.melbank_processors = [SimpleNamespace(melbank_frequencies=FREQS)]
     data.bar_oscillator = lambda: phase
     data.bpm_beat_now = lambda: False
     data.volume_beat_now = lambda: False
@@ -897,9 +868,7 @@ def test_palette_shift_moves_the_palette():
 
 
 def test_auto_sections_off_rotates_blindly():
-    effect = make_effect(
-        pixel_count=8, mode="auto", auto_steps=1, auto_sections=False
-    )
+    effect = make_effect(pixel_count=8, mode="auto", auto_steps=1, auto_sections=False)
     for _ in range(60):
         effect.audio_data_updated(audio_data(1.0))
     # The detector is not fed, and the choice comes from every mode

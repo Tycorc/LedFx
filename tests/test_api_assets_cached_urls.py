@@ -58,7 +58,7 @@ def sample_gif_bytes():
 class TestAssetsDownloadCachedURL:
     """Test /api/assets/download with cached URLs."""
 
-    @patch("ledfx.utils.urllib.request.urlopen")
+    @patch("ledfx.utils.safe_urlopen")
     def test_download_uncached_url_returns_error(self, mock_urlopen):
         """
         Test that requesting an unreachable URL returns appropriate error.
@@ -107,7 +107,7 @@ class TestAssetsDownloadCachedURL:
 class TestAssetsThumbnailCachedURL:
     """Test /api/assets/thumbnail with cached URLs."""
 
-    @patch("ledfx.utils.urllib.request.urlopen")
+    @patch("ledfx.utils.safe_urlopen")
     def test_thumbnail_uncached_url_returns_error(self, mock_urlopen):
         """
         Test that requesting thumbnail of unreachable URL returns error.
@@ -176,7 +176,9 @@ class TestURLDownloadWithExternalURL:
 
     # Use GitHub raw content URLs as reliable test image sources
     # These URLs have proper file extensions and are highly available
-    TEST_PNG_URL = "https://raw.githubusercontent.com/github/explore/main/topics/python/python.png"
+    TEST_PNG_URL = (
+        "https://raw.githubusercontent.com/github/explore/main/topics/python/python.png"
+    )
     TEST_GIF_URL = "https://raw.githubusercontent.com/github/explore/main/topics/git/git.png"  # Actually PNG but works
 
     def test_download_url_successfully(self):
@@ -240,9 +242,7 @@ class TestURLDownloadWithExternalURL:
         assert resp2.status_code == 200
         assert resp2.content == first_content
         # Cache hit should be reasonably fast (< 3 seconds for local cache read + API overhead)
-        assert (
-            cache_time < 3.0
-        ), f"Cache hit took {cache_time:.2f}s, expected < 3s"
+        assert cache_time < 3.0, f"Cache hit took {cache_time:.2f}s, expected < 3s"
 
     def test_thumbnail_url_successfully(self):
         """Test thumbnail generation from URL."""
@@ -320,6 +320,7 @@ class TestURLDownloadWithExternalURL:
             # Should mention validation or failed (validates includes the word "validate")
             error_msg = result["payload"]["reason"].lower()
             assert any(
-                keyword in error_msg
-                for keyword in ["validate", "failed", "blocked"]
-            ), f"Expected security/validation error for {url}, got: {result['payload']['reason']}"
+                keyword in error_msg for keyword in ["validate", "failed", "blocked"]
+            ), (
+                f"Expected security/validation error for {url}, got: {result['payload']['reason']}"
+            )

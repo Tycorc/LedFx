@@ -21,9 +21,7 @@ STEP_MAPPINGS = {
 }
 
 
-def step_trigger_schema(
-    trigger="Beat", steps_per_beat="1", timer_bpm=128, lead=0.0
-):
+def step_trigger_schema(trigger="Beat", steps_per_beat="1", timer_bpm=128, lead=0.0):
     """Schema entries for the trigger settings, with the given defaults."""
     return {
         vol.Optional(
@@ -111,15 +109,13 @@ class StepTrigger:
             # beat rates stay in time with the music. A detected beat is
             # always a step boundary at one or more steps per beat.
             phase = data.bar_oscillator() * self.steps_per_beat
-            crossed = (
-                int(phase) != int(self._last_phase) or phase < self._last_phase
-            )
+            crossed = int(phase) != int(self._last_phase) or phase < self._last_phase
             if crossed and self.steps_per_beat >= 1:
                 # The oscillator runs on past the next whole beat when the
                 # tracker reports that beat late, so whole beat boundaries
                 # are the beat's own: counting the crossing as well would
                 # fire the step twice
-                crossed = int(phase) % int(round(self.steps_per_beat)) != 0
+                crossed = int(phase) % round(self.steps_per_beat) != 0
             if (beat and self.steps_per_beat >= 1) or crossed:
                 self.pending = True
             self._last_phase = phase

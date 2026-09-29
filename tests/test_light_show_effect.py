@@ -1,7 +1,7 @@
 """Unit tests for the Light Show effect and the shared StepTrigger."""
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -10,24 +10,31 @@ from ledfx.effects import Effect
 from ledfx.effects.light_show import LightShowEffect
 from ledfx.effects.utils.step_trigger import StepTrigger
 
-RED_BLUE = (
-    "linear-gradient(90deg, #ff0000 0%, #ff0000 50%, "
-    "#0000ff 50%, #0000ff 100%)"
-)
+RED_BLUE = "linear-gradient(90deg, #ff0000 0%, #ff0000 50%, #0000ff 50%, #0000ff 100%)"
 RED_WHITE_BLUE = (
     "linear-gradient(90deg, #ff0000 0%, #ff0000 33%, #ffffff 33%, "
     "#ffffff 66%, #0000ff 66%, #0000ff 100%)"
 )
 
 
-def make_effect(pixel_count=5, **config):
+SEED = 7
+
+
+def activate(effect, virtual, seed=SEED):
+    """Activate with a seeded random generator so runs are reproducible."""
+    default_rng = np.random.default_rng
+    with patch("numpy.random.default_rng", lambda: default_rng(seed)):
+        Effect.activate(effect, virtual)
+
+
+def make_effect(pixel_count=5, seed=SEED, **config):
     """Build an activated Light Show effect without the audio stack."""
     config.setdefault("trigger", "Timer")
     # 30 BPM: one step every two seconds, so nothing fires mid test
     config.setdefault("timer_bpm", 30)
     effect = LightShowEffect(ledfx=MagicMock(), config=config)
     virtual = SimpleNamespace(effective_pixel_count=pixel_count, id="test")
-    Effect.activate(effect, virtual)
+    activate(effect, virtual, seed)
     effect.now = effect._stepper.last_step_time
     return effect
 
@@ -230,7 +237,7 @@ def test_stage_pattern_cycles_the_stages():
     )
     frames = [lit_lamps(render_at(effect, 0.0))]
     frames += [lit_lamps(step(effect)) for _ in range(2)]
-    assert sorted(sum(frames, [])) == [0, 1, 2, 3, 4, 5]
+    assert sorted(lamp for frame in frames for lamp in frame) == [0, 1, 2, 3, 4, 5]
     for lamps in frames:
         assert len(lamps) == 2
         assert lamps[0] % 3 == lamps[1] % 3
@@ -304,9 +311,7 @@ def test_fade_grow_and_glow_envelopes():
         pixel_count=2, pattern="all", envelope="grow", backlight_brightness=0
     )
     assert render_at(grow, 0.0).max() == 0
-    assert np.allclose(
-        render_at(grow, 1.0), render_at(grow, 1.99) * 0.5, atol=3
-    )
+    assert np.allclose(render_at(grow, 1.0), render_at(grow, 1.99) * 0.5, atol=3)
     glow = make_effect(
         pixel_count=2, pattern="all", envelope="glow", backlight_brightness=0
     )
@@ -503,9 +508,7 @@ def test_auto_changes_every_auto_steps():
 
 
 def test_auto_picks_the_loud_set_on_loud_music():
-    effect = make_effect(
-        pixel_count=4, pattern="auto", envelope="auto", auto_steps=1
-    )
+    effect = make_effect(pixel_count=4, pattern="auto", envelope="auto", auto_steps=1)
     audio = FakeAudio()
     audio.lows = 1.0
     for _ in range(100):
@@ -582,7 +585,7 @@ def make_room_effect(positions, **config):
         group_size=1,
         rows=1,
     )
-    Effect.activate(effect, virtual)
+    activate(effect, virtual)
     effect.now = effect._stepper.last_step_time
     return effect
 
@@ -1047,7 +1050,7 @@ def test_room_stage_with_four_groups_takes_the_corners_in_turn():
     seen = [lit_lamps(render_at(effect, 0.0))]
     seen += [lit_lamps(step(effect)) for _ in range(3)]
     assert all(len(lamps) == 1 for lamps in seen)
-    assert sorted(sum(seen, [])) == [0, 1, 2, 3]
+    assert sorted(lamp for frame in seen for lamp in frame) == [0, 1, 2, 3]
 
 
 def test_room_split_is_left_and_right():
@@ -1179,9 +1182,7 @@ def test_room_grouping_falls_back_to_a_ring_without_positions():
 
 
 def test_line_layout_orders_the_lamps_left_to_right():
-    effect = make_effect(
-        pixel_count=5, grouping="room", layout="Line", pattern="cycle"
-    )
+    effect = make_effect(pixel_count=5, grouping="room", layout="Line", pattern="cycle")
     assert effect._position_source == "line"
     assert effect._walk.tolist() == [0, 1, 2, 3, 4]
     assert effect._opposite.tolist() == [4, 3, 1, 1, 0]
@@ -1219,13 +1220,11 @@ def test_zones_share_the_positions_of_their_pixels():
 
 def test_auto_sets_and_rhythms_are_consistent():
     for pattern in (
-        LightShowEffect.AUTO_LOUD_PATTERNS
-        + LightShowEffect.AUTO_QUIET_PATTERNS
+        LightShowEffect.AUTO_LOUD_PATTERNS + LightShowEffect.AUTO_QUIET_PATTERNS
     ):
         assert pattern in LightShowEffect.PATTERNS
     for envelope in (
-        LightShowEffect.AUTO_LOUD_ENVELOPES
-        + LightShowEffect.AUTO_QUIET_ENVELOPES
+        LightShowEffect.AUTO_LOUD_ENVELOPES + LightShowEffect.AUTO_QUIET_ENVELOPES
     ):
         assert envelope in LightShowEffect.ENVELOPES
     for mode in LightShowEffect.AUTO_COLOR_MODES:
@@ -1246,7 +1245,7 @@ def test_sixteen_stages_give_one_lamp_per_stage():
     seen = [lit_lamps(render_at(effect, 0.0))]
     seen += [lit_lamps(step(effect)) for _ in range(15)]
     assert all(len(lamps) == 1 for lamps in seen)
-    assert sorted(sum(seen, [])) == list(range(16))
+    assert sorted(lamp for frame in seen for lamp in frame) == list(range(16))
 
 
 def test_pattern_change_starts_the_new_pattern_fresh():

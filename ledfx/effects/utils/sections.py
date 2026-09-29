@@ -110,16 +110,10 @@ class SectionDetector:
         )
         normalised = min(1.0, raw / self._peak)
 
-        tau = (
-            self.FAST_ATTACK if normalised >= self.fast else self.FAST_RELEASE
-        )
-        self.fast += (normalised - self.fast) * (
-            1.0 - math.exp(-elapsed / tau)
-        )
+        tau = self.FAST_ATTACK if normalised >= self.fast else self.FAST_RELEASE
+        self.fast += (normalised - self.fast) * (1.0 - math.exp(-elapsed / tau))
         tau = self.ATTACK if normalised >= self.level else self.RELEASE
-        self.level += (normalised - self.level) * (
-            1.0 - math.exp(-elapsed / tau)
-        )
+        self.level += (normalised - self.level) * (1.0 - math.exp(-elapsed / tau))
 
         # Drops
         if self.fast >= self.DROP_LEVEL:

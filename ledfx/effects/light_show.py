@@ -1,6 +1,7 @@
 """Light Show: pattern based party effects for a room of smart bulbs."""
 
 import timeit
+from typing import ClassVar
 
 import numpy as np
 import voluptuous as vol
@@ -49,7 +50,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
 
     NAME = "Light Show"
     CATEGORY = "BPM"
-    HIDDEN_KEYS = ["gradient_roll"]
+    HIDDEN_KEYS: ClassVar[list[str]] = ["gradient_roll"]
     ADVANCED_KEYS = AudioReactiveEffect.ADVANCED_KEYS + [
         "zones",
         "layout",
@@ -62,7 +63,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         "rhythm",
     ]
 
-    PATTERNS = [
+    PATTERNS: ClassVar[list[str]] = [
         "auto",
         "all",
         "cycle",
@@ -84,7 +85,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         "wave",
         "loop",
     ]
-    ENVELOPES = [
+    ENVELOPES: ClassVar[list[str]] = [
         "auto",
         "strobe",
         "hold",
@@ -98,11 +99,17 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         "cross fade",
         "swell",
     ]
-    COLOR_MODES = ["auto", "cycle", "random", "per lamp", "per group"]
-    GROUPINGS = ["order", "room"]
+    COLOR_MODES: ClassVar[list[str]] = [
+        "auto",
+        "cycle",
+        "random",
+        "per lamp",
+        "per group",
+    ]
+    GROUPINGS: ClassVar[list[str]] = ["order", "room"]
     # Which steps fire, meant for four steps per beat so that 16 characters
     # are one bar: x = a step, . = keep the lamps as they are, o = all off
-    RHYTHMS = {
+    RHYTHMS: ClassVar[dict[str, str]] = {
         "steady": "x",
         "downbeat": "x...x...x...x.x.",
         "offbeat": "x..x..x...x.x...",
@@ -136,7 +143,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
 
     # What auto mode picks from. Loud passages get the harder patterns and
     # envelopes, quiet ones the softer set.
-    AUTO_LOUD_PATTERNS = [
+    AUTO_LOUD_PATTERNS: ClassVar[list[str]] = [
         "all",
         "stage",
         "double",
@@ -148,7 +155,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         "scatter fill",
         "sweep",
     ]
-    AUTO_QUIET_PATTERNS = [
+    AUTO_QUIET_PATTERNS: ClassVar[list[str]] = [
         "cycle",
         "fill",
         "stage fill",
@@ -160,8 +167,15 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         "scatter",
         "double",
     ]
-    AUTO_LOUD_ENVELOPES = ["strobe", "flare", "fade", "hold", "pulse", "peak"]
-    AUTO_QUIET_ENVELOPES = [
+    AUTO_LOUD_ENVELOPES: ClassVar[list[str]] = [
+        "strobe",
+        "flare",
+        "fade",
+        "hold",
+        "pulse",
+        "peak",
+    ]
+    AUTO_QUIET_ENVELOPES: ClassVar[list[str]] = [
         "fade",
         "glow",
         "grow",
@@ -170,7 +184,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         "swell",
         "dip",
     ]
-    AUTO_COLOR_MODES = ["cycle", "random", "per lamp", "per group"]
+    AUTO_COLOR_MODES: ClassVar[list[str]] = ["cycle", "random", "per lamp", "per group"]
     # Filtered lows power above which a passage counts as loud
     AUTO_LOUD_LEVEL = 0.35
 
@@ -331,9 +345,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         self.auto_steps = self._config["auto_steps"]
         self.stages = self._config["stages"]
         if getattr(self, "_energy_filter", None) is None:
-            self._energy_filter = self.create_filter(
-                alpha_decay=0.02, alpha_rise=0.1
-            )
+            self._energy_filter = self.create_filter(alpha_decay=0.02, alpha_rise=0.1)
         self.color_step = self._config["color_step"]
         self.strobe_flashes = self._config["strobe_flashes"]
         self.flash_length = self._config["flash_length"]
@@ -395,21 +407,15 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         """Resolve every setting on auto to a concrete value."""
         loud = self._energy >= self.AUTO_LOUD_LEVEL
         if self._config["pattern"] == "auto":
-            options = (
-                self.AUTO_LOUD_PATTERNS if loud else self.AUTO_QUIET_PATTERNS
-            )
+            options = self.AUTO_LOUD_PATTERNS if loud else self.AUTO_QUIET_PATTERNS
             self.pattern = self._auto_choice(options, self.pattern)
             if getattr(self, "_lit", None) is not None:
                 self._reset_pattern_state()
         if self._config["envelope"] == "auto":
-            options = (
-                self.AUTO_LOUD_ENVELOPES if loud else self.AUTO_QUIET_ENVELOPES
-            )
+            options = self.AUTO_LOUD_ENVELOPES if loud else self.AUTO_QUIET_ENVELOPES
             self.envelope = self._auto_choice(options, self.envelope)
         if self._config["color_mode"] == "auto":
-            self.color_mode = self._auto_choice(
-                self.AUTO_COLOR_MODES, self.color_mode
-            )
+            self.color_mode = self._auto_choice(self.AUTO_COLOR_MODES, self.color_mode)
             self._recolor_static()
 
     @property
@@ -504,9 +510,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
 
         neighbours = min(self.NEIGHBOUR_COUNT, max(0, (n - 1) // 2))
         if neighbours > 0:
-            distance = np.linalg.norm(
-                lamps[:, None, :] - lamps[None, :, :], axis=2
-            )
+            distance = np.linalg.norm(lamps[:, None, :] - lamps[None, :, :], axis=2)
             np.fill_diagonal(distance, np.inf)
             near = np.zeros((n, n), dtype=bool)
             closest = np.argsort(distance, axis=1)[:, :neighbours]
@@ -639,9 +643,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
             active[lamps] = True
 
         self._round_pos = position + 1
-        finished = self._round_pos >= (
-            2 * length if pattern == "sweep" else length
-        )
+        finished = self._round_pos >= (2 * length if pattern == "sweep" else length)
         if finished:
             self._round_order = None
             self._rest_left = self.rest_steps
@@ -681,9 +683,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         elif pattern == "double scatter":
             first = self._random_lamp(exclude=self._cursor)
             active[first] = True
-            active[self._random_lamp(exclude=first, spread_from=(first,))] = (
-                True
-            )
+            active[self._random_lamp(exclude=first, spread_from=(first,))] = True
             self._cursor = first
 
         elif pattern == "sprinkle":
@@ -697,9 +697,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
                     avoid = self._last_set
                 else:
                     avoid = ()
-                chosen.append(
-                    self._random_lamp(avoid=avoid, spread_from=chosen)
-                )
+                chosen.append(self._random_lamp(avoid=avoid, spread_from=chosen))
             self._last_set = np.array(chosen, dtype=int)
             active[chosen] = True
 
@@ -779,9 +777,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         self._lit_now = active
         gap = self._rhythm_gap(index)
         self._lit_time[active] = now
-        self._lit_duration[active] = (
-            self._stepper.step_interval * self.trail * gap
-        )
+        self._lit_duration[active] = self._stepper.step_interval * self.trail * gap
         self._lit_step[active] = self._step_count
 
         self._prev_colors = self._zone_colors.copy()
@@ -795,12 +791,8 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
             self._zone_points[targets] = self._color_point
             self._zone_colors[targets] = self._palette([self._color_point])[0]
         elif mode == "random":
-            self._zone_points[recolor] = self._next_points(
-                self._zone_points[recolor]
-            )
-            self._zone_colors[recolor] = self._palette(
-                self._zone_points[recolor]
-            )
+            self._zone_points[recolor] = self._next_points(self._zone_points[recolor])
+            self._zone_colors[recolor] = self._palette(self._zone_points[recolor])
         elif mode == "per lamp":
             positions = self._lamp_positions()
             if self.pattern == "loop":
@@ -864,9 +856,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
             on = (slot % 2 == 0) & (slot < 2 * self.strobe_flashes) & (p < 1)
             levels[active] = on.astype(float)
         elif envelope == "swell":
-            phase = np.radians(
-                self._lit_step[active] * self.SWELL_STEP_DEGREES
-            )
+            phase = np.radians(self._lit_step[active] * self.SWELL_STEP_DEGREES)
             levels[active] = 0.5 + 0.5 * np.sin(phase)
         else:
             levels[active] = 1.0
@@ -909,8 +899,8 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
             )
             colors = np.where(at_peak[:, None], self.flare_color, colors)
         elif envelope == "cross fade":
-            colors = self._prev_colors + (colors - self._prev_colors) * (
-                progress[:, None]
+            colors = (
+                self._prev_colors + (colors - self._prev_colors) * (progress[:, None])
             )
 
         if self.pattern in self.ROUND_PATTERNS and not self._blank:
@@ -935,7 +925,7 @@ class LightShowEffect(AudioReactiveEffect, GradientEffect):
         levels = self._limiter.apply(levels, now)
         # Every lamp starts on the backlight and the lit lamps blend
         # towards their colour by their level
-        lamp_pixels = self.backlight * (1.0 - levels)[:, None] + colors * (
-            levels[:, None]
+        lamp_pixels = (
+            self.backlight * (1.0 - levels)[:, None] + colors * (levels[:, None])
         )
         self.pixels[:] = lamp_pixels[self._zone_of_pixel]

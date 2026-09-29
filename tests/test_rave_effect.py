@@ -9,10 +9,7 @@ import pytest
 from ledfx.effects import Effect
 from ledfx.effects.rave import RaveEffect
 
-RED_BLUE = (
-    "linear-gradient(90deg, #ff0000 0%, #ff0000 50%, "
-    "#0000ff 50%, #0000ff 100%)"
-)
+RED_BLUE = "linear-gradient(90deg, #ff0000 0%, #ff0000 50%, #0000ff 50%, #0000ff 100%)"
 
 
 def make_effect(pixel_count=5, **config):
@@ -152,9 +149,7 @@ def test_alternate_mode_never_shows_one_colour_on_a_hard_edged_palette():
 
 def test_fade_dims_lamps_between_steps():
     # 30 BPM: one timer step every 2 seconds, so nothing fires mid test
-    effect = make_effect(
-        pixel_count=5, trigger="Timer", timer_bpm=30, fade=1.0
-    )
+    effect = make_effect(pixel_count=5, trigger="Timer", timer_bpm=30, fade=1.0)
     assert effect._step_interval == 2.0
     bright = render_at(effect, 0.0)
     dim = render_at(effect, 1.0)

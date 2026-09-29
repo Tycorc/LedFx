@@ -8,7 +8,7 @@ LedFx is a real-time LED visualization system syncing audio input to networked L
 
 - Tests: `uv run pytest ...`
 - Scripts: `uv run python ...`
-- Linting: `uv run black ...`, `uv run flake8 ...`
+- Linting: `uv run --group dev prek run --all-files` (ruff check --fix + ruff format; `uv run --group dev prek install -f` adds it as a git hook, replacing an old pre-commit hook)
 - Packages: `uv sync`, `uv add` (not `pip install`)
 
 ## Key Structure
@@ -32,9 +32,14 @@ All effects inherit from `Effect` (extends `BaseRegistry`). Modify `self.pixels`
 ```python
 class MyEffect(Effect):
     NAME = "My Effect"
-    CONFIG_SCHEMA = vol.Schema({
-        vol.Optional("speed", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=10.0)),
-    })
+    CONFIG_SCHEMA = vol.Schema(
+        {
+            vol.Optional("speed", default=1.0): vol.All(
+                vol.Coerce(float), vol.Range(min=0.1, max=10.0)
+            ),
+        }
+    )
+
     def render(self):
         pass  # modify self.pixels
 ```
@@ -59,7 +64,7 @@ All devices inherit from `BaseRegistry`. Implement `flush()` for data transmissi
 - **Paths**: Use `os.path` only — `os.path.join()`, `os.path.exists()`, `os.makedirs()`, `os.remove()`. **Never use `pathlib`.**
 - **Logging**: `_LOGGER.warning()` for client errors; `_LOGGER.error()` for system errors only (avoid Sentry noise).
 - **NumPy**: Vectorized operations for pixel manipulation; protect shared state with `self.lock`.
-- **Formatting**: black + flake8 (E501 relaxed) + isort.
+- **Formatting**: ruff defaults (format + default rule set, 88 columns) plus G004, run through prek. Existing violations carry `# noqa`; PRs are auto-fixed by autofix.ci.
 
 ## Security Testing
 

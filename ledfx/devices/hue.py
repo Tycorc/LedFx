@@ -3,14 +3,13 @@ import math
 import re
 import socket
 import time
-from typing import Optional
 
 import requests
 import voluptuous as vol
 
 # Try to import the optional package
 try:
-    import mbedtls.tls as tls
+    from mbedtls import tls
 
     MBEDTLS_AVAILABLE = True
 except ImportError:
@@ -63,7 +62,7 @@ class HueDevice(NetworkedDevice):
     )
 
     status: dict[int, tuple[int, int, int]]
-    _sock: Optional[socket.socket] = None
+    _sock: socket.socket | None = None
 
     def __init__(self, ledfx, config):
         super().__init__(ledfx, config)
@@ -71,7 +70,7 @@ class HueDevice(NetworkedDevice):
         self._channel_ids = None
         self._stream_started = False
         if not MBEDTLS_AVAILABLE:
-            raise Exception(
+            raise Exception(  # noqa: TRY002
                 "You need to install the python-mbedtls package for Hue to work."
             )
 
@@ -124,14 +123,12 @@ class HueDevice(NetworkedDevice):
                 )
             else:
                 # The Bridge Link Button needs to be pressed
-                raise Exception(
+                raise Exception(  # noqa: TRY002
                     "You need to press the Bridge Link Button and retry that again."
                 )
         else:
             # We need to check if the credentials are still valid for this device.
-            response, _ = self._hue_request(
-                "GET", f"api/{self._config['username']}"
-            )
+            response, _ = self._hue_request("GET", f"api/{self._config['username']}")
             # A successful v1 GET returns an object; failures are a list of
             # error objects. Indexing a successful response raises KeyError.
             if isinstance(response, list) and any(
@@ -140,14 +137,14 @@ class HueDevice(NetworkedDevice):
                 # Credentials are no longer valid - need Bridge Link Button to be pressed and LedFx to be restarted.
                 # We delete the invalid credentials here - after a restart a fresh registration will be tried.
                 self.update_config({"username": None, "clientkey": None})
-                raise Exception(
+                raise Exception(  # noqa: TRY002
                     "You need to press the Bridge Link Button and restart LedFx."
                 )
 
     def _check_hue_bridge(self):
         response, _ = self._hue_request("GET", "api/config")
         if response["swversion"] < "1948086000":
-            raise Exception(
+            raise Exception(  # noqa: TRY002
                 "Your Hue Bridge has an outdated Firmware installed. Update it using the Hue App."
             )
 
@@ -170,8 +167,7 @@ class HueDevice(NetworkedDevice):
         if not isinstance(response, dict):
             return []
         return [
-            error.get("description", str(error))
-            for error in response.get("errors", [])
+            error.get("description", str(error)) for error in response.get("errors", [])
         ]
 
     def _entertainment_groups(self):
@@ -183,7 +179,7 @@ class HueDevice(NetworkedDevice):
         entertainmentZonesCount = len(all_groups)
 
         if entertainmentZonesCount == 0:
-            raise Exception(
+            raise Exception(  # noqa: TRY002
                 "You did not setup any Entertainment zones. Do that in the Hue App."
             )
 
@@ -194,8 +190,8 @@ class HueDevice(NetworkedDevice):
             "GET",
             f"/clip/v2/resource/entertainment_configuration/{entertainment_id}",
         )
-        lights = dict()
-        members = dict()
+        lights = {}
+        members = {}
         for channel in response["data"][0]["channels"]:
             channel_id = str(channel["channel_id"])
             lights[channel_id] = [
@@ -213,7 +209,7 @@ class HueDevice(NetworkedDevice):
             ]
 
         if len(lights) > MAX_CHANNELS:
-            raise Exception(
+            raise Exception(  # noqa: TRY002
                 f"{len(lights)} channels found. A Hue entertainment zone can have at most {MAX_CHANNELS}."
             )
 
@@ -227,15 +223,13 @@ class HueDevice(NetworkedDevice):
         bridge so far, the Bridge Pro included, reports 1.
         """
         try:
-            response, _ = self._hue_request(
-                "GET", "/clip/v2/resource/entertainment"
-            )
+            response, _ = self._hue_request("GET", "/clip/v2/resource/entertainment")
             streams = [
                 int(service["max_streams"])
                 for service in response.get("data", [])
                 if service.get("max_streams") is not None
             ]
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             _LOGGER.debug(
                 "%s: could not read the bridge stream capacity: %s",
                 self.name,
@@ -269,11 +263,11 @@ class HueDevice(NetworkedDevice):
             return []
 
         if order == "Left to right":
-            key = lambda item: (item[1][0], item[0])  # noqa: E731
+            key = lambda item: (item[1][0], item[0])
         elif order == "Front to back":
-            key = lambda item: (-item[1][1], item[0])  # noqa: E731
+            key = lambda item: (-item[1][1], item[0])
         elif order == "Bottom to top":
-            key = lambda item: (item[1][2], item[0])  # noqa: E731
+            key = lambda item: (item[1][2], item[0])
         elif order == "Around the room":
             # Clockwise seen from above with the front (TV side) at the top,
             # starting on the left: left, front, right, back.
@@ -286,7 +280,7 @@ class HueDevice(NetworkedDevice):
                 return (round((math.pi - angle) % (2 * math.pi), 6), item[0])
 
         else:
-            key = lambda item: item[0]  # noqa: E731
+            key = lambda item: item[0]
 
         return [channel_id for channel_id, _ in sorted(channels, key=key)]
 
@@ -312,9 +306,7 @@ class HueDevice(NetworkedDevice):
         segments = {}
         for channel_id, channel_members in (members or {}).items():
             for rid, index in channel_members:
-                segments.setdefault(rid, []).append(
-                    (int(index), int(channel_id))
-                )
+                segments.setdefault(rid, []).append((int(index), int(channel_id)))
 
         strips = {}
         for rid, entries in segments.items():
@@ -340,9 +332,7 @@ class HueDevice(NetworkedDevice):
             if chosen is None:
                 chosen = min(
                     remaining,
-                    key=lambda rid: min(
-                        rank.get(c, 0) for c in remaining[rid]
-                    ),
+                    key=lambda rid: min(rank.get(c, 0) for c in remaining[rid]),
                 )
             chain = list(remaining.pop(chosen))
             if ordered and ordered[-1] in chain:
@@ -513,10 +503,8 @@ class HueDevice(NetworkedDevice):
             self._sock = self._dtls_client_context.wrap_socket(
                 self._sock, self._config["ip_address"]
             )
-            self._sock.connect(
-                (self._config["ip_address"], self._config["udp_port"])
-            )
-        except Exception as e:
+            self._sock.connect((self._config["ip_address"], self._config["udp_port"]))
+        except Exception as e:  # noqa: BLE001
             _LOGGER.warning(
                 "%s: could not open the Hue stream socket: %s", self.name, e
             )
@@ -531,7 +519,7 @@ class HueDevice(NetworkedDevice):
                 self._sock.do_handshake()
                 handshake_success = True
                 break
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 _LOGGER.warning(
                     "Failed to establish TLS handshake when activating the UDP stream. Retrying. %s",
                     e,
@@ -581,7 +569,7 @@ class HueDevice(NetworkedDevice):
 
         try:
             self._sock.send(frame)
-        except Exception:
+        except Exception:  # noqa: BLE001
             self.activate()
 
     async def async_initialize(self):
@@ -614,9 +602,7 @@ class HueDevice(NetworkedDevice):
         entertainment_group = entertainment_groups[entertainment_id]
         group_id = re.findall(r"\d+", entertainment_group["id_v1"])[0]
 
-        lights, members = self._lights_from_entertainment_group(
-            entertainment_id
-        )
+        lights, members = self._lights_from_entertainment_group(entertainment_id)
 
         config = {
             "group_id": group_id,

@@ -2,6 +2,7 @@
 
 import math
 import timeit
+from typing import ClassVar
 
 import numpy as np
 import voluptuous as vol
@@ -59,7 +60,7 @@ class TrueStrobeEffect(AudioReactiveEffect, GradientEffect):
 
     NAME = "True Strobe"
     CATEGORY = "BPM"
-    HIDDEN_KEYS = ["gradient_roll"]
+    HIDDEN_KEYS: ClassVar[list[str]] = ["gradient_roll"]
     ADVANCED_KEYS = AudioReactiveEffect.ADVANCED_KEYS + [
         "zones",
         "color_step",
@@ -67,7 +68,7 @@ class TrueStrobeEffect(AudioReactiveEffect, GradientEffect):
         "sensitivity",
     ]
 
-    SPREADS = [
+    SPREADS: ClassVar[list[str]] = [
         "all",
         "alternate",
         "halves",
@@ -77,13 +78,13 @@ class TrueStrobeEffect(AudioReactiveEffect, GradientEffect):
         "scatter",
         "random",
     ]
-    COLOR_MODES = [
+    COLOR_MODES: ClassVar[list[str]] = [
         "strobe color",
         "palette cycle",
         "palette by position",
         "palette random",
     ]
-    GATES = ["always", "beat bursts", "level"]
+    GATES: ClassVar[list[str]] = ["always", "beat bursts", "level"]
 
     # Smart bulbs cannot follow anything faster than this many flashes a
     # second, whatever the settings say
@@ -199,9 +200,7 @@ class TrueStrobeEffect(AudioReactiveEffect, GradientEffect):
         self.on_time = config["on_time"]
         self.spread = config["spread"]
         self.color_mode = config["color_mode"]
-        self.strobe_color = np.array(
-            parse_color(config["strobe_color"]), dtype=float
-        )
+        self.strobe_color = np.array(parse_color(config["strobe_color"]), dtype=float)
         self.gate = config["gate"]
         self.burst_flashes = config["burst_flashes"]
         self.threshold = config["threshold"]
@@ -253,9 +252,7 @@ class TrueStrobeEffect(AudioReactiveEffect, GradientEffect):
         pixel_positions, source = resolve_positions(
             self.layout, pixel_count, self._virtual, self._ledfx
         )
-        positions = normalise(
-            zone_positions(pixel_positions, self._zone_of_pixel, n)
-        )
+        positions = normalise(zone_positions(pixel_positions, self._zone_of_pixel, n))
         self._positions = positions
         self._position_source = source
         turns = angles(positions)
@@ -314,9 +311,7 @@ class TrueStrobeEffect(AudioReactiveEffect, GradientEffect):
     def _start_run(self, now):
         """Start a run of flashes: unlimited, or a burst on a step."""
         self._origin = now
-        self._run_flashes = (
-            self.burst_flashes if self.gate == "beat bursts" else None
-        )
+        self._run_flashes = self.burst_flashes if self.gate == "beat bursts" else None
         self._last_index = -1
         self._flash_index = -1
         self._flash_start = -np.inf
@@ -329,7 +324,7 @@ class TrueStrobeEffect(AudioReactiveEffect, GradientEffect):
         elapsed = now - self._origin
         if elapsed < 0.0:
             return -1
-        index = int(math.floor(elapsed / period + self.INDEX_EPSILON))
+        index = math.floor(elapsed / period + self.INDEX_EPSILON)
         if self._run_flashes is not None:
             index = min(index, self._run_flashes - 1)
         return index
@@ -341,10 +336,7 @@ class TrueStrobeEffect(AudioReactiveEffect, GradientEffect):
 
     def _next_due(self, period):
         """When the flash after the current one is expected."""
-        if (
-            self._run_flashes is not None
-            and self._flash_index >= self._run_flashes - 1
-        ):
+        if self._run_flashes is not None and self._flash_index >= self._run_flashes - 1:
             # The last flash of a burst: the next one comes with the next step
             return self._origin + self._stepper.step_interval
         return self._flash_start + period
@@ -388,7 +380,7 @@ class TrueStrobeEffect(AudioReactiveEffect, GradientEffect):
         elif spread == "ripple":
             lit = self._ripple_group == index % self._groups
         elif spread == "scatter":
-            count = max(1, min(n, int(round(self.density * n))))
+            count = max(1, min(n, round(self.density * n)))
             lit[self._rng.choice(n, count, replace=False)] = True
         elif spread == "random":
             if 0 <= self._last_random < n:

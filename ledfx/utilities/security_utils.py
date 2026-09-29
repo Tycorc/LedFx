@@ -7,6 +7,7 @@ across assets.py, utils.py, and API endpoints to ensure consistent
 security controls.
 """
 
+import http.client
 import ipaddress
 import logging
 import mimetypes
@@ -14,8 +15,9 @@ import os
 import socket
 import urllib.parse
 import urllib.request
+from functools import partial
 
-import PIL.Image as Image
+from PIL import Image
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -90,6 +92,14 @@ ALWAYS_BLOCKED_IP_NETWORKS = [
     ipaddress.ip_network("fe80::/10"),
     # IPv6 Multicast
     ipaddress.ip_network("ff00::/8"),
+    # Obsolete IPv6 transition mechanisms that embed an IPv4 destination
+    # (GHSA-pc6c-8c73-p6p2); embedded addresses are also checked below.
+    ipaddress.ip_network("2002::/16"),  # 6to4 (RFC 3056)
+    ipaddress.ip_network("2001::/32"),  # Teredo (RFC 4380)
+    ipaddress.ip_network("::/96"),  # IPv4-compatible (RFC 4291, deprecated)
+    # NAT64 local-use (RFC 8215): operator-chosen prefix length, so the IPv4
+    # position is not fixed; block the range rather than guess.
+    ipaddress.ip_network("64:ff9b:1::/48"),
 ]
 
 # Private networks blocked by default but allowed with allow_private=True
@@ -98,6 +108,8 @@ PRIVATE_IP_NETWORKS = [
     ipaddress.ip_network("10.0.0.0/8"),
     ipaddress.ip_network("172.16.0.0/12"),
     ipaddress.ip_network("192.168.0.0/16"),
+    # Carrier-grade NAT / shared address space (RFC 6598), e.g. Tailscale
+    ipaddress.ip_network("100.64.0.0/10"),
     # IPv6 Private/ULA
     ipaddress.ip_network("fc00::/7"),
     ipaddress.ip_network("fd00::/8"),
@@ -198,9 +210,7 @@ def resolve_safe_path_in_directory(
         return True, resolved_path, None
 
     except (ValueError, OSError) as e:
-        _LOGGER.warning(
-            "Path resolution failed for '%s': %s", relative_path, e
-        )
+        _LOGGER.warning("Path resolution failed for '%s': %s", relative_path, e)
         return False, None, f"Invalid path: {e}"
 
 
@@ -219,9 +229,7 @@ def validate_local_path(
                or None if validation failed
     """
     if not allowed_directories:
-        _LOGGER.warning(
-            "No allowed directories configured for path validation"
-        )
+        _LOGGER.warning("No allowed directories configured for path validation")
         return False, None
 
     try:
@@ -256,6 +264,43 @@ def validate_local_path(
 # =============================================================================
 
 
+# NAT64 well-known prefix (RFC 6052): the last 32 bits are the IPv4
+# destination. Checked via the embedded address rather than blocked outright,
+# so DNS64 networks can still reach public hosts.
+_NAT64_WELL_KNOWN = ipaddress.ip_network("64:ff9b::/96")
+
+
+def _ip_and_embedded_ipv4(
+    ip_str: str,
+) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+    """Parse an IP and add any IPv4 destination embedded in an IPv6 address.
+
+    ipaddress never compares across families, so without this e.g.
+    ::ffff:127.0.0.1 or 64:ff9b::a9fe:a9fe slips past the IPv4 blocks.
+    """
+    ip = ipaddress.ip_address(ip_str)
+    candidates: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = [ip]
+    if isinstance(ip, ipaddress.IPv6Address):
+        if ip.ipv4_mapped is not None:
+            candidates.append(ip.ipv4_mapped)
+        if ip.sixtofour is not None:
+            candidates.append(ip.sixtofour)
+        if ip.teredo is not None:
+            candidates.extend(ip.teredo)
+        if ip in _NAT64_WELL_KNOWN or ip in ipaddress.ip_network("::/96"):
+            candidates.append(ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF))
+    return candidates
+
+
+def _is_in_networks(
+    ip_str: str,
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network],
+) -> bool:
+    return any(
+        ip in network for ip in _ip_and_embedded_ipv4(ip_str) for network in networks
+    )
+
+
 def is_blocked_ip(ip_str: str) -> bool:
     """
     Check if an IP address is in the blocklist.
@@ -267,19 +312,13 @@ def is_blocked_ip(ip_str: str) -> bool:
         bool: True if IP is blocked
     """
     try:
-        ip = ipaddress.ip_address(ip_str)
-        for network in BLOCKED_IP_NETWORKS:
-            if ip in network:
-                return True
-        return False
+        return _is_in_networks(ip_str, BLOCKED_IP_NETWORKS)
     except ValueError:
         # Invalid IP address
         return True
 
 
-def validate_url_safety(
-    url: str, allow_private: bool = False
-) -> tuple[bool, str]:
+def validate_url_safety(url: str, allow_private: bool = False) -> tuple[bool, str]:
     """
     Validate URL for SSRF protection by checking scheme, hostname, and resolved IP.
 
@@ -320,29 +359,132 @@ def validate_url_safety(
 
         # Select which networks to block based on context
         blocked_networks = (
-            ALWAYS_BLOCKED_IP_NETWORKS
-            if allow_private
-            else BLOCKED_IP_NETWORKS
+            ALWAYS_BLOCKED_IP_NETWORKS if allow_private else BLOCKED_IP_NETWORKS
         )
 
         # Check all resolved IPs
         for family, socktype, proto, canonname, sockaddr in addr_info:
-            ip_str = sockaddr[0]
+            ip_str = str(sockaddr[0])
             try:
-                ip = ipaddress.ip_address(ip_str)
-                for network in blocked_networks:
-                    if ip in network:
-                        return (
-                            False,
-                            f"URL resolves to blocked IP address: {ip_str}",
-                        )
+                if _is_in_networks(ip_str, blocked_networks):
+                    return (
+                        False,
+                        f"URL resolves to blocked IP address: {ip_str}",
+                    )
             except ValueError:
                 return False, f"Invalid IP address resolved: {ip_str}"
 
         return True, ""
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return False, f"URL validation error: {e}"
+
+
+def _create_validated_connection(
+    address: tuple[str, int],
+    timeout: float | None = None,
+    source_address: tuple[str, int] | None = None,
+    *,
+    allow_private: bool = False,
+) -> socket.socket:
+    """socket.create_connection that connects only to addresses it validated.
+
+    Resolving once and connecting to the checked sockaddr closes the DNS
+    rebinding window between validate_url_safety() and the fetch, and also
+    covers redirects, which never pass through validate_url_safety().
+    """
+    host, port = address
+    if host.lower() in BLOCKED_HOSTNAMES:
+        raise OSError(f"Hostname '{host}' is blocked")
+    blocked_networks = (
+        ALWAYS_BLOCKED_IP_NETWORKS if allow_private else BLOCKED_IP_NETWORKS
+    )
+    addr_info = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)
+    for *_, sockaddr in addr_info:
+        if _is_in_networks(str(sockaddr[0]), blocked_networks):
+            raise OSError(f"'{host}' resolves to blocked IP address: {sockaddr[0]}")
+
+    error: OSError | None = None
+    for family, socktype, proto, _, sockaddr in addr_info:
+        sock = socket.socket(family, socktype, proto)
+        try:
+            if timeout is not None:
+                sock.settimeout(timeout)
+            if source_address:
+                sock.bind(source_address)
+            sock.connect(sockaddr)
+            return sock
+        except OSError as exc:
+            error = exc
+            sock.close()
+    raise error or OSError(f"Could not connect to '{host}'")
+
+
+class _ValidatedHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, *args, allow_private: bool = False, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._create_connection = partial(
+            _create_validated_connection, allow_private=allow_private
+        )
+
+
+class _ValidatedHTTPSConnection(http.client.HTTPSConnection):
+    # TLS SNI and certificate checks still use the hostname (self.host).
+    def __init__(self, *args, allow_private: bool = False, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._create_connection = partial(
+            _create_validated_connection, allow_private=allow_private
+        )
+
+
+class _ValidatedHTTPHandler(urllib.request.HTTPHandler):
+    def __init__(self, allow_private: bool) -> None:
+        super().__init__()
+        self._allow_private = allow_private
+
+    def http_open(self, req: urllib.request.Request) -> http.client.HTTPResponse:
+        return self.do_open(
+            partial(_ValidatedHTTPConnection, allow_private=self._allow_private), req
+        )
+
+
+class _ValidatedHTTPSHandler(urllib.request.HTTPSHandler):
+    def __init__(self, allow_private: bool) -> None:
+        super().__init__()
+        self._allow_private = allow_private
+
+    def https_open(self, req: urllib.request.Request) -> http.client.HTTPResponse:
+        return self.do_open(
+            partial(_ValidatedHTTPSConnection, allow_private=self._allow_private),
+            req,
+            context=self._context,
+        )
+
+
+def safe_urlopen(
+    request: urllib.request.Request | str,
+    timeout: float,
+    allow_private: bool = False,
+) -> http.client.HTTPResponse:
+    """urlopen that re-validates every connection, including redirects.
+
+    Call validate_url_safety() first for a readable rejection reason; this
+    enforces the same policy on the address actually connected to. Proxies
+    are disabled (a proxy would resolve the target itself), and only
+    http/https are handled, so redirects to ftp:// or file:// fail.
+    """
+    opener = urllib.request.OpenerDirector()
+    for handler in (
+        urllib.request.ProxyHandler({}),
+        urllib.request.UnknownHandler(),
+        _ValidatedHTTPHandler(allow_private),
+        _ValidatedHTTPSHandler(allow_private),
+        urllib.request.HTTPDefaultErrorHandler(),
+        urllib.request.HTTPRedirectHandler(),
+        urllib.request.HTTPErrorProcessor(),
+    ):
+        opener.add_handler(handler)
+    return opener.open(request, timeout=timeout)
 
 
 # =============================================================================
@@ -409,11 +551,8 @@ def validate_image_mime_type(file_path: str) -> bool:
 
         # Additional MIME check using file extension
         mime_type, _ = mimetypes.guess_type(file_path)
-        if mime_type and mime_type not in ALLOWED_MIME_TYPES:
-            return False
-
-        return True
-    except Exception:
+        return not (mime_type and mime_type not in ALLOWED_MIME_TYPES)
+    except Exception:  # noqa: BLE001
         return False
 
 
@@ -457,9 +596,7 @@ def build_browser_request(url: str) -> urllib.request.Request:
     """
     parsed = urllib.parse.urlsplit(url)
     origin = (
-        f"{parsed.scheme}://{parsed.netloc}/"
-        if parsed.scheme and parsed.netloc
-        else ""
+        f"{parsed.scheme}://{parsed.netloc}/" if parsed.scheme and parsed.netloc else ""
     )
     headers = {
         "User-Agent": (

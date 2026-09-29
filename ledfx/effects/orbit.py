@@ -2,6 +2,7 @@
 
 import math
 import timeit
+from typing import ClassVar
 
 import numpy as np
 import voluptuous as vol
@@ -64,7 +65,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
 
     NAME = "Orbit"
     CATEGORY = "BPM"
-    HIDDEN_KEYS = ["gradient_roll"]
+    HIDDEN_KEYS: ClassVar[list[str]] = ["gradient_roll"]
     ADVANCED_KEYS = AudioReactiveEffect.ADVANCED_KEYS + [
         "zones",
         "auto_steps",
@@ -74,7 +75,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
         "flash_limit",
     ]
 
-    MODES = [
+    MODES: ClassVar[list[str]] = [
         "auto",
         "swirl",
         "beacon",
@@ -90,7 +91,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
     AUTO_MODES = MODES[1:]
     # What auto mode picks from in the loud and the quiet sections of a
     # track when it follows the sections; soft sections pick from all
-    AUTO_LOUD_MODES = [
+    AUTO_LOUD_MODES: ClassVar[list[str]] = [
         "beacon",
         "sectors",
         "sweep",
@@ -98,10 +99,10 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
         "corners",
         "scatter",
     ]
-    AUTO_QUIET_MODES = ["swirl", "wave", "ripple", "noise"]
+    AUTO_QUIET_MODES: ClassVar[list[str]] = ["swirl", "wave", "ripple", "noise"]
     STEPPED_MODES = ("sweep", "halves", "corners", "scatter")
-    SPINS = ["clockwise", "counter", "alternate", "random"]
-    PLANES = ["floor", "front wall", "side wall"]
+    SPINS: ClassVar[list[str]] = ["clockwise", "counter", "alternate", "random"]
+    PLANES: ClassVar[list[str]] = ["floor", "front wall", "side wall"]
 
     # With at most this many pixels every pixel is its own lamp
     AUTO_ZONE_PIXEL_LIMIT = 32
@@ -137,9 +138,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
                 description="Where the lamps stand: Auto takes the device positions when it knows them and a ring otherwise",
                 default="Auto",
             ): vol.In(LAYOUTS),
-            **step_trigger_schema(
-                trigger="Beat", steps_per_beat="1", timer_bpm=120
-            ),
+            **step_trigger_schema(trigger="Beat", steps_per_beat="1", timer_bpm=120),
             vol.Optional(
                 "beats_per_turn",
                 description="Beats for one turn of the field, one wave cycle or one noise drift unit",
@@ -263,9 +262,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
             self._band.configure(self.band, self.sensitivity)
         if getattr(self, "_limiter", None) is not None:
             self._limiter.enabled = self.flash_limit
-        if getattr(self, "pixels", None) is None or not hasattr(
-            self, "_geometry_key"
-        ):
+        if getattr(self, "pixels", None) is None or not hasattr(self, "_geometry_key"):
             return
 
         now = timeit.default_timer()
@@ -296,7 +293,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
     def _virtual_rows(self):
         try:
             return int(getattr(self._virtual, "rows", 1) or 1)
-        except Exception:
+        except Exception:  # noqa: BLE001
             return 1
 
     def _build_zones(self, pixel_count):
@@ -437,9 +434,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
         else:
             self._point = (
                 self._point
-                + self._rng.uniform(
-                    self.MIN_PALETTE_STEP, 1.0 - self.MIN_PALETTE_STEP
-                )
+                + self._rng.uniform(self.MIN_PALETTE_STEP, 1.0 - self.MIN_PALETTE_STEP)
             ) % 1.0
         return self._point
 
@@ -458,10 +453,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
     def _step(self, now):
         """One event: the stepped modes advance, auto mode may switch."""
         self._step_count += 1
-        if (
-            self.mode_config == "auto"
-            and self._step_count % self.auto_steps == 0
-        ):
+        if self.mode_config == "auto" and self._step_count % self.auto_steps == 0:
             self._switch_auto()
         event = self._event
         self._event += 1
@@ -522,9 +514,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
         lamps = self._rng.choice(choices, size=count, replace=False)
         self._cluster_lamps = [int(lamp) for lamp in lamps]
         self._cluster_centres = self._space[self._cluster_lamps]
-        self._cluster_points = np.array(
-            [self._next_point() for _ in range(count)]
-        )
+        self._cluster_points = np.array([self._next_point() for _ in range(count)])
 
     # ---------------------------------------------------------------- audio
 
@@ -542,9 +532,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
             phase = data.bar_oscillator()
             if not isinstance(phase, (int, float)):
                 phase = None
-            raw = float(
-                np.mean(np.nan_to_num(np.asarray(melbank, dtype=float)))
-            )
+            raw = float(np.mean(np.nan_to_num(np.asarray(melbank, dtype=float))))
             self._sections.update(raw, now, phase)
             if self._sections.drop:
                 self._drop_pending = True
@@ -567,9 +555,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
 
     def _palette(self, points):
         """Palette colours, (n, 3) in 0..255, for points anywhere on the line."""
-        points = np.mod(
-            np.asarray(points, dtype=float) + self._palette_shift, 1.0
-        )
+        points = np.mod(np.asarray(points, dtype=float) + self._palette_shift, 1.0)
         return self.get_gradient_color_vectorized1d(points)
 
     def _palette_one(self, point):
@@ -608,9 +594,7 @@ class OrbitEffect(AudioReactiveEffect, GradientEffect):
         hold = 1.0 - self.softness
         if progress <= hold:
             return 1.0
-        return float(
-            np.clip(1.0 - (progress - hold) / max(1e-6, self.softness), 0, 1)
-        )
+        return float(np.clip(1.0 - (progress - hold) / max(1e-6, self.softness), 0, 1))
 
     def _noise_values(self):
         """The noise field at every lamp, 0..1, drifting with the phase."""

@@ -1,4 +1,5 @@
 import logging
+from typing import ClassVar
 
 import numpy as np
 import voluptuous as vol
@@ -21,8 +22,7 @@ class BlendVirtual:
         self.rows = virtual.config["rows"]
         self.columns = int(virtual.pixel_count / self.rows)
         self.matching = (
-            self.rows == fallback_shape[0]
-            and self.columns == fallback_shape[1]
+            self.rows == fallback_shape[0] and self.columns == fallback_shape[1]
         )
         # Store reference to active_effect to avoid race condition where effect
         # is deactivated between hasattr check and get_matrix() call
@@ -35,9 +35,7 @@ class BlendVirtual:
                 (self.rows, self.columns, 3)
             )
             # Convert the numpy array back into a Pillow image
-            self.matrix = Image.fromarray(
-                reshaped_pixels.astype(np.uint8), "RGB"
-            )
+            self.matrix = Image.fromarray(reshaped_pixels.astype(np.uint8), "RGB")
 
 
 def stretch_2d_full(blend_virtual):
@@ -91,7 +89,11 @@ STRETCH_FUNCS_MAPPING = {
 class Blender(AudioReactiveEffect):
     NAME = "Blender"
     CATEGORY = "Matrix"
-    HIDDEN_KEYS = ["background_color", "background_brightness", "blur"]
+    HIDDEN_KEYS: ClassVar[list[str]] = [
+        "background_color",
+        "background_brightness",
+        "blur",
+    ]
 
     CONFIG_SCHEMA = vol.Schema(
         {
@@ -153,9 +155,7 @@ class Blender(AudioReactiveEffect):
         self.invert_mask = self._config["invert_mask"]
         self.mask_cutoff = self._config["mask_cutoff"]
 
-        self.mask_stretch_func = STRETCH_FUNCS_MAPPING[
-            self._config["mask_stretch"]
-        ]
+        self.mask_stretch_func = STRETCH_FUNCS_MAPPING[self._config["mask_stretch"]]
         self.foreground_stretch_func = STRETCH_FUNCS_MAPPING[
             self._config["foreground_stretch"]
         ]
@@ -185,7 +185,7 @@ class Blender(AudioReactiveEffect):
                 self._ledfx.virtuals._virtuals,
                 (self.rows, self.columns),
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             _LOGGER.warning(
                 "Virtual %s Blender virtuals not ready %s",
                 self._virtual.name,

@@ -1,6 +1,7 @@
 """Party: tempo and audio driven effect families for smart bulbs and strips."""
 
 import timeit
+from typing import ClassVar
 
 import numpy as np
 import voluptuous as vol
@@ -77,9 +78,7 @@ def curve(progress, kind):
     if kind == "ease out":
         return 1.0 - (1.0 - p) * (1.0 - p)
     if kind == "ease in out":
-        return np.where(
-            p < 0.5, 4.0 * p * p * p, 1.0 - ((-2.0 * p + 2.0) ** 3) / 2.0
-        )
+        return np.where(p < 0.5, 4.0 * p * p * p, 1.0 - ((-2.0 * p + 2.0) ** 3) / 2.0)
     return p
 
 
@@ -108,9 +107,7 @@ def ahdsr(envelope, progress, kind):
     if p < hold_end:
         return peak
     if p < decay_end:
-        return peak + (sustain - peak) * float(
-            curve((p - hold_end) / decay, kind)
-        )
+        return peak + (sustain - peak) * float(curve((p - hold_end) / decay, kind))
     if p < release_start:
         return sustain
     if release <= 0.0:
@@ -173,7 +170,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
 
     NAME = "Party"
     CATEGORY = "BPM"
-    HIDDEN_KEYS = ["gradient_roll"]
+    HIDDEN_KEYS: ClassVar[list[str]] = ["gradient_roll"]
     ADVANCED_KEYS = AudioReactiveEffect.ADVANCED_KEYS + [
         "zones",
         "layout",
@@ -187,7 +184,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
         "flash_limit",
     ]
 
-    FAMILIES = [
+    FAMILIES: ClassVar[list[str]] = [
         "adsr",
         "chase",
         "radial",
@@ -202,9 +199,15 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
         "fireworks",
         "pulse",
     ]
-    CURVES = ["cut", "linear", "ease in", "ease out", "ease in out"]
-    DIRECTIONS = ["forward", "reverse", "alternate", "random"]
-    ORDERS = ["Position", "Room", "Heading", "Random"]
+    CURVES: ClassVar[list[str]] = [
+        "cut",
+        "linear",
+        "ease in",
+        "ease out",
+        "ease in out",
+    ]
+    DIRECTIONS: ClassVar[list[str]] = ["forward", "reverse", "alternate", "random"]
+    ORDERS: ClassVar[list[str]] = ["Position", "Room", "Heading", "Random"]
     BANDS = band_level.BANDS
 
     AUTO_ZONE_PIXEL_LIMIT = 32
@@ -215,7 +218,9 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
     LEVEL_ATTACK = 0.03
     LEVEL_RELEASE = 0.22
     # Band edges in Hz for the reactive levels: bass, mids and high
-    BAND_EDGES = [band_level.BAND_EDGES[name] for name in BANDS[1:]]
+    BAND_EDGES: ClassVar[list[tuple[float, float]]] = [
+        band_level.BAND_EDGES[name] for name in BANDS[1:]
+    ]
     # Reactive depth the gate and burst families use while the setting is 0
     GATE_DEPTH = 0.8
     BURST_DEPTH = 0.6
@@ -256,9 +261,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
                 description="Colour for the single colour envelope shapes",
                 default="#0080FF",
             ): validate_color,
-            **step_trigger_schema(
-                trigger="Beat", steps_per_beat="1", timer_bpm=120
-            ),
+            **step_trigger_schema(trigger="Beat", steps_per_beat="1", timer_bpm=120),
             vol.Optional(
                 "curve",
                 description="Shape of the rises and falls",
@@ -495,9 +498,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
         if self._spatial:
             distance = self._spatial_distance
         else:
-            distance = np.abs(
-                self._position[:, None] - self._position[None, :]
-            )
+            distance = np.abs(self._position[:, None] - self._position[None, :])
         far = distance.max(axis=1, keepdims=True)
         self._lamp_distance = distance / np.where(far > 1e-9, far, 1.0)
         # Spread picks may wander by this much of the lamp spacing, so the
@@ -610,16 +611,11 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
     # --------------------------------------------------------------- events
 
     def _envelope_length(self):
-        return (
-            self.attack + self.hold + self.release
-        ) * self._stepper.beat_period()
+        return (self.attack + self.hold + self.release) * self._stepper.beat_period()
 
     def _step(self, now):
         """A new event starts on every step."""
-        if (
-            self.family == "burst"
-            and now - self._last_burst < self.BURST_INTERVAL
-        ):
+        if self.family == "burst" and now - self._last_burst < self.BURST_INTERVAL:
             return
         if self.family == "burst":
             self._last_burst = now
@@ -630,24 +626,18 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
             # rendered yet) so that this one is never the same lamp
             if self._event_index > 0:
                 self._fire_origin(self._event_index - 1)
-            self._fire_origins[self._event_index] = self._pick_origin(
-                self._event_index
-            )
+            self._fire_origins[self._event_index] = self._pick_origin(self._event_index)
 
     def _prune_events(self, now):
         keep = self._envelope_length()
         if self.family == "chase":
-            keep += (
-                self.stagger * self._stepper.beat_period() * self._zone_count
-            )
+            keep += self.stagger * self._stepper.beat_period() * self._zone_count
         elif self.family == "fireworks":
             keep += self.stagger * self._stepper.beat_period()
         elif self.family == "adsr":
             keep = self._stepper.step_interval
         self._events = [
-            (start, index)
-            for start, index in self._events
-            if now - start < keep + 0.05
+            (start, index) for start, index in self._events if now - start < keep + 0.05
         ]
         if len(self._fire_origins) > 64:
             newest = max(self._fire_origins)
@@ -696,9 +686,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
         n = self._zone_count
         beat = self._stepper.beat_period()
         if self.family == "chase":
-            rank = (
-                (n - 1 - self._rank) if self._reversed(event) else self._rank
-            )
+            rank = (n - 1 - self._rank) if self._reversed(event) else self._rank
             return age - rank * self.stagger * beat
         if self.family == "fireworks":
             distance = self._lamp_distance[self._fire_origin(event)]
@@ -738,9 +726,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
             extent = max(origin, 1.0 - origin)
         return distance / (max(0.05, self.radius) * max(extent, 1e-6))
 
-    def _kernel(
-        self, event, progress, envelope_length, age=0.0, envelope=None
-    ):
+    def _kernel(self, event, progress, envelope_length, age=0.0, envelope=None):
         """
         Strength and palette position of every lamp for one event.
 
@@ -775,9 +761,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
                     self._raised_cosine(phase + 2.0 / 3.0),
                 ),
             )
-            strength = (
-                (0.72 + 0.28 * lobes) if gated else (0.55 + 0.45 * lobes)
-            )
+            strength = (0.72 + 0.28 * lobes) if gated else (0.55 + 0.45 * lobes)
             return strength, phase
 
         if family == "scan":
@@ -833,9 +817,11 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
                 lit = roll <= self.probability
             slot = self.FLICKER_ON + self.FLICKER_DIP
             flicker = 1.0
-            if 0.0 <= age < self._flash_count(event) * slot:
-                if (age % slot) >= self.FLICKER_ON:
-                    flicker = self.FLICKER_LEVEL
+            if (
+                0.0 <= age < self._flash_count(event) * slot
+                and (age % slot) >= self.FLICKER_ON
+            ):
+                flicker = self.FLICKER_LEVEL
             return np.where(lit, flicker, 0.0), roll * 0.5 + event * 0.13
 
         if family == "fireworks":
@@ -872,11 +858,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
             floor = min(0.99, self.threshold)
             level = max(0.0, (level - floor) / (1.0 - floor))
             if depth <= 0.0:
-                depth = (
-                    self.GATE_DEPTH
-                    if self.family == "gate"
-                    else self.BURST_DEPTH
-                )
+                depth = self.GATE_DEPTH if self.family == "gate" else self.BURST_DEPTH
         return 1.0 - depth + level * depth
 
     def _render_adsr(self, now):
@@ -922,13 +904,9 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
         white = np.clip((strike - 0.25) / 0.35, 0.0, 1.0)[:, None]
         colors = colors + (255.0 - colors) * white
         period = 0.4 + 0.2 * hash01(self._seed, keys, 3)
-        wobble = self._raised_cosine(
-            now / period + hash01(self._seed, keys, 4)
-        )
+        wobble = self._raised_cosine(now / period + hash01(self._seed, keys, 4))
         glow = (self.GLOW_BASE + self.GLOW_WOBBLE * wobble) * scale
-        glow_colors = self.get_gradient_color_vectorized1d(
-            hash01(self._seed, keys, 5)
-        )
+        glow_colors = self.get_gradient_color_vectorized1d(hash01(self._seed, keys, 5))
         dim = brightness < glow
         colors = np.where(dim[:, None], glow_colors, colors)
         return colors, np.maximum(brightness, glow)
@@ -946,14 +924,10 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
             if not np.any(envelope > 0.0):
                 continue
             progress = float(np.clip(age / length, 0.0, 1.0))
-            strength, pos = self._kernel(
-                event, progress, length, age, envelope
-            )
+            strength, pos = self._kernel(event, progress, length, age, envelope)
             value = np.clip(envelope * strength, 0.0, 1.0)
             better = (value > best) | (
-                (np.abs(value - best) < 1e-6)
-                & (event > best_event)
-                & (value > 0)
+                (np.abs(value - best) < 1e-6) & (event > best_event) & (value > 0)
             )
             best = np.where(better, value, best)
             palette = np.where(better, pos, palette)
@@ -963,9 +937,7 @@ class PartyEffect(AudioReactiveEffect, GradientEffect):
         brightness = best * scale
         colors = self.get_gradient_color_vectorized1d(palette % 1.0)
         if self.family == "lightning":
-            colors, brightness = self._storm_glow(
-                colors, best, brightness, scale, now
-            )
+            colors, brightness = self._storm_glow(colors, best, brightness, scale, now)
         return colors, brightness
 
     def render(self):
