@@ -32,6 +32,12 @@ def render_at(effect, t):
     return np.copy(effect.pixels)
 
 
+def feed_audio(effect, audio):
+    """Hand the effect one audio frame stamped with its own clock."""
+    with patch("timeit.default_timer", lambda: effect.now):
+        effect.audio_data_updated(audio)
+
+
 class FakeAudio:
     """Minimal stand in for AudioAnalysisSource."""
 
@@ -186,28 +192,28 @@ def test_beat_trigger_steps_once_per_beat():
     # First beat: audio takes control and a step is queued
     audio.beat = True
     audio.bar = 0.0
-    effect.audio_data_updated(audio)
+    feed_audio(effect, audio)
     assert effect._step_pending
     effect._step_pending = False
 
     # Moving within the same beat does not queue another step
     audio.beat = False
     audio.bar = 0.5
-    effect.audio_data_updated(audio)
+    feed_audio(effect, audio)
     assert not effect._step_pending
 
     # Crossing into the next beat does
     audio.bar = 1.1
-    effect.audio_data_updated(audio)
+    feed_audio(effect, audio)
     assert effect._step_pending
     effect._step_pending = False
 
     # Wrapping around the bar counts as a new beat too
     audio.bar = 3.9
-    effect.audio_data_updated(audio)
+    feed_audio(effect, audio)
     effect._step_pending = False
     audio.bar = 0.1
-    effect.audio_data_updated(audio)
+    feed_audio(effect, audio)
     assert effect._step_pending
 
 
@@ -215,14 +221,14 @@ def test_beat_trigger_sub_steps():
     effect = make_effect(pixel_count=5, trigger="Beat", steps_per_beat="4")
     audio = FakeAudio()
     audio.beat = True
-    effect.audio_data_updated(audio)
+    feed_audio(effect, audio)
     effect._step_pending = False
     audio.beat = False
 
     steps = 0
     for bar in np.linspace(0.01, 0.99, 40):
         audio.bar = bar
-        effect.audio_data_updated(audio)
+        feed_audio(effect, audio)
         if effect._step_pending:
             steps += 1
             effect._step_pending = False
@@ -236,7 +242,7 @@ def test_timer_takes_over_when_no_beat_is_heard():
 
     # A beat hands control to the audio trigger: the timer must stay quiet
     audio.beat = True
-    effect.audio_data_updated(audio)
+    feed_audio(effect, audio)
     effect._step_pending = False
     before = render_at(effect, effect.timer_interval * 2)
     assert np.array_equal(before, render_at(effect, effect.timer_interval * 2))
@@ -249,7 +255,7 @@ def test_timer_takes_over_when_no_beat_is_heard():
     # And while silent, the free running bar oscillator is ignored
     audio.beat = False
     audio.bar = 2.0
-    effect.audio_data_updated(audio)
+    feed_audio(effect, audio)
     assert not effect._step_pending
 
 
@@ -257,11 +263,11 @@ def test_timer_takes_over_when_no_beat_is_heard():
 def test_hit_triggers_queue_a_step(trigger):
     effect = make_effect(pixel_count=5, trigger=trigger)
     audio = FakeAudio()
-    effect.audio_data_updated(audio)
+    feed_audio(effect, audio)
     assert not effect._step_pending
     audio.bass = True
     audio.onset_now = True
-    effect.audio_data_updated(audio)
+    feed_audio(effect, audio)
     assert effect._step_pending
 
 
