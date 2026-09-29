@@ -50,8 +50,11 @@ When you set up an entertainment area, the Hue app asks you to place every light
 | `Left to right`   | The left most light.                                                |
 | `Front to back`   | The light nearest the TV side of the map.                           |
 | `Bottom to top`   | The lowest light, for floor lamps first and ceiling lights last.    |
+| `Along the strips`| The segments of every gradient strip one after another in strip order, strips that share a channel chained together, then the bulbs around the room. |
 
 `Around the room` is the one to pick for the [Rave](../effects/simple/rave.md) chase and for any scrolling or scanning effect, so that the movement travels around the walls instead of jumping between lights in the order you happened to add them. `Left to right` turns a row of lights into a short strip for bar and equalizer style effects. Lights at the same position keep their Hue app order, and every effect's **Flip** setting reverses whichever order you choose.
+
+`Along the strips` is the order for gradient products. A Hue gradient strip has several segments and the bridge spreads them over the channels of the zone, sometimes putting the last segment of one strip and the first of the next on a single channel. This order reads which light and segment every channel paints and lines the channels up so that a palette runs along each strip in segment order and straight on into the next strip, with the plain bulbs following around the room. Any effect that draws colours along the pixels then flows along the strips: the Light Show `loop` and `wave` patterns, the Party `chase`, `wash` and `scan` families, and LedFx's own gradient and scroll effects.
 
 The order can be changed at any time from the device settings. Positions are read from the bridge every time LedFx starts, so after moving lights on the map in the Hue app, restart LedFx to pick up the new layout.
 
@@ -63,13 +66,14 @@ Any LedFx effect can be set on a Hue device, but bear in mind that the device on
 
 ### Party mode
 
-Three effects were built for exactly this case, where every pixel is a whole lamp. Together they cover what the Disco mode of hueDynamic and the entertainment effect library of Light DJ do:
+Four effects were built for exactly this case, where every pixel is a whole lamp:
 
-- **Disco** is sound to light: bass, voice and treble lamps that flash when their band peaks, a whole room pulse on the beat, or a "neural" mode where colour and brightness follow the music continuously. Presets *Spectrum Party*, *Bass And Treble*, *Peak Pulse*, *Peak Strobe* and *Neural Lounge*. See the [Disco effect documentation](../effects/simple/disco.md).
-- **Light Show** is the pattern library: strobe cycles, scatter fades, stage strobes, fills, splits, waves and palette loops, each with a choice of envelope and an optional backlight, stepping on the beat. Presets are named after the Light DJ effects they reproduce, from *Strobe Cycle* to *Vortex*, and *Auto Pilot* changes the show by itself every few bars. See the [Light Show effect documentation](../effects/simple/light_show.md).
-- **Rave** is the simple party mode: the lamps snap to new palette colours on the beat with random, wash, chase, alternate and strobe patterns. Presets *Club*, *Rainbow Party*, *Strobe Drop*, *Police*, *Round The Room* and *Slow Wash*. See the [Rave effect documentation](../effects/simple/rave.md).
+- **Disco** is sound to light: bass, voice and treble lamps that flash when their band hits and fade until the next beat, a one lamp per beat Peak mode, and the Void analyser where colour and brightness follow the music continuously. Genre presets from *Pop* to *Ambient*, plus *Peak Pulse*, *Peak Strobe* and *Enter The Void*. See the [Disco effect documentation](../effects/simple/disco.md).
+- **Party** is the smooth show engine: chases, rings, washes, scans, comets, twinkles, breathing and bursts that rise and fall on the beat and can follow the music level. Presets from *Frost Strike* to *Tyc Scatter Strobe*. See the [Party effect documentation](../effects/simple/party.md).
+- **Light Show** is the hard edged pattern library: strobe cycles, scatter glows, stage strobes, fills, splits, waves and palette loops, each with a choice of envelope and an optional backlight, and *Tyc Autopilot* changes the show by itself every few bars. See the [Light Show effect documentation](../effects/simple/light_show.md).
+- **Rave** is the simple party mode: the lamps snap to new palette colours on the beat with random, wash, chase, alternate and strobe patterns. See the [Rave effect documentation](../effects/simple/rave.md).
 
-For the chase, split and loop patterns set the device's Light order to `Around the room`, `Left to right` or `Front to back` so that the movement follows the walls.
+For anything that turns the room (chase, loop, scan, split) set the device's Light order to `Around the room`, `Left to right` or `Front to back` so that the movement follows the walls.
 
 Other effects that work well on a handful of bulbs are **BPM Strobe**, **Bar**, **Multicolor Bar**, **Power**, **Energy** and **Blade Power+**, all of which colour the whole output from the music.
 

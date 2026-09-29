@@ -2,7 +2,7 @@
 
 ## Overview
 
-Light Show reproduces the entertainment effect libraries of Hue DJ apps such as Light DJ: strobe cycles, scatter fades, stage strobes, fills, palette loops, waves, and the backlit variants of all of them. Those libraries list dozens of named effects, but every one of them is a combination of four things, which is what Light Show exposes:
+Light Show is the pattern library for a room of lamps: strobe cycles, scatter glows, stage strobes, fills, palette loops, waves, and backlit variants of all of them. Dozens of named party effects boil down to a combination of four things, which is what Light Show exposes:
 
 - **Pattern**: which lamps light up on each step.
 - **Envelope**: what a lit lamp does during the step.
@@ -15,7 +15,7 @@ Like [Rave](rave.md), the output is treated as a handful of independent lamps (o
 
 Set **Pattern**, **Envelope** or **Colour mode** (or all three) to `auto` and Light Show runs its own show, like the autopilot of a DJ app. Every **Auto Steps** steps (16 by default, four bars at one step per beat) the settings on auto change to something else. The choice follows the music: while the bass is loud the picks come from the harder set (`all`, `stage`, `double`, `split`, `scatter` patterns with `strobe`, `flare`, `fade` or `hold` envelopes), in quieter passages from the softer set (`cycle`, `fill`, `wave`, `loop` patterns with `fade`, `glow`, `grow` or `hold`). Settings that are not on auto are left alone, so `cycle` pattern with `auto` envelope walks round the room forever while the envelope changes.
 
-The *Auto Pilot* preset is the no hands option for a party. To switch between whole effects automatically, for example between Auto Pilot, Disco and Rave, put them in scenes and use a LedFx playlist in shuffle mode.
+The *Tyc Autopilot* preset is the no hands option for a party. To switch between whole effects automatically, for example between Tyc Autopilot, Disco, Party and Rave, put them in scenes and use a LedFx playlist in shuffle mode.
 
 ## Patterns
 
@@ -73,25 +73,23 @@ Flashing lights, and in particular whole room flashes faster than about three pe
 
 ## Presets
 
-The presets are named after the Light DJ effects they reproduce.
-
-| Preset               | Pattern | Envelope | Colours  | Notes                                             |
-|----------------------|---------|----------|----------|---------------------------------------------------|
-| Auto Pilot           | auto    | auto     | auto     | Changes every four bars, harder when loud         |
-| Auto Pilot Backlit   | auto    | auto     | auto     | Two steps a beat over a dim blue room, 8 bars     |
-| Strobe Cycle         | cycle   | strobe   | cycle    | One blue flash walking round the room             |
-| Party Strobe         | all     | strobe   | random   | Every lamp a random rainbow colour, twice a beat  |
-| Scatter Fade         | scatter | fade     | cycle    | Pink fades on random lamps                        |
-| Palette Strobe       | all     | strobe   | cycle    | Red, white, blue on successive beats              |
-| Backlit Strobe Cycle | cycle   | strobe   | cycle    | White flash cycling over a dim red room           |
-| Fill Cycle           | fill    | hold     | cycle    | Orange and blue lamps filling up the room         |
-| 3-Stage Strobe       | stage   | strobe   | cycle    | Three groups of lamps taking turns                |
-| Fireworks            | scatter | flare    | random   | White bursts settling into rainbow colours        |
-| Split                | split   | fade     | per lamp | Blue half, red half                               |
-| Sine Wave            | wave    | hold     | per lamp | Orange to blue wave, one cycle every two beats    |
-| Palette Loop         | loop    | hold     | per lamp | The rainbow walking round the room                |
-| Vortex               | loop    | glow     | per lamp | Pink and green chasing, two repeats               |
-| Police               | split   | strobe   | per lamp | Red and blue halves flashing at 300 changes/min   |
+| Preset                 | Pattern | Envelope | Colours  | Notes                                             |
+|------------------------|---------|----------|----------|---------------------------------------------------|
+| Tyc Autopilot          | auto    | auto     | auto     | Changes every four bars, harder when loud         |
+| Tyc Autopilot Backlit  | auto    | auto     | auto     | Two steps a beat over a dim blue room, 8 bars     |
+| Orbit Strobe           | cycle   | strobe   | cycle    | One blue flash walking round the room             |
+| Tyc Party Strobe       | all     | strobe   | random   | Every lamp a random rainbow colour, twice a beat  |
+| Scatter Glow           | scatter | fade     | cycle    | Pink fades on random lamps                        |
+| Tricolour Strobe       | all     | strobe   | cycle    | Red, white, blue on successive beats              |
+| Ember Orbit            | cycle   | strobe   | cycle    | White flash cycling over a dim red room           |
+| Room Fill              | fill    | hold     | cycle    | Orange and blue lamps filling up the room         |
+| Triad Strobe           | stage   | strobe   | cycle    | Three groups of lamps taking turns                |
+| Skyburst               | scatter | flare    | random   | White bursts settling into rainbow colours        |
+| Half And Half          | split   | fade     | per lamp | Blue half, red half                               |
+| Tide                   | wave    | hold     | per lamp | Orange to blue wave, one cycle every two beats    |
+| Carousel               | loop    | hold     | per lamp | The rainbow walking round the room                |
+| Tyc Vortex             | loop    | glow     | per lamp | Pink and green chasing, two repeats               |
+| Blue Light             | split   | strobe   | per lamp | Red and blue halves flashing at 300 changes/min   |
 
 ## Strips And Matrices
 
@@ -99,14 +97,14 @@ Light Show is not limited to bulbs. On a WLED strip or matrix the output is spli
 
 ## Building Your Own
 
-Most of the Light DJ list maps onto a preset with one setting changed:
+Most named party effects are one setting away from a preset:
 
-- *Fade Cycle*, *Grow Cycle*: Strobe Cycle with the `fade` or `grow` envelope.
-- *Scatter Strobe*, *Scatter Grow*: Scatter Fade with the `strobe` or `grow` envelope.
-- *Double Strobe Cycle*, *Double Scatter Strobe*: the `double` and `double scatter` patterns with `strobe`.
-- *5-Stage Strobe*, *5-Stage Fade*, *5-Stage Glow*: the `stage` pattern with Stages 5 and the matching envelope.
-- *Studio Fill 4*, *Palette Fill*: the `fill` pattern with Zones 4, or a palette with cycle colours.
-- *Backlit anything*: the same show with a backlight colour and some backlight brightness.
-- *Double Wave*, *Thin Palette Loop*: `wave` with Stages 2, `loop` with Stages 3.
-- *Old Glory*, *Vertical Lines*: `all` with `hold` and `per lamp` colours on a red, white, blue or a rainbow palette.
-- *Front Back*, *Two Corners*: the `split` pattern with the Hue device's light order set to `Front to back` or `Around the room`.
+- A fade or grow cycle: Orbit Strobe with the `fade` or `grow` envelope.
+- A scatter strobe or scatter grow: Scatter Glow with the `strobe` or `grow` envelope.
+- Two lamps at a time: the `double` and `double scatter` patterns with `strobe`.
+- Five stages: the `stage` pattern with Stages 5 and any envelope.
+- A four beat fill: the `fill` pattern with Zones 4.
+- Backlit anything: the same show with a backlight colour and some backlight brightness.
+- A double wave or a thin loop: `wave` with Stages 2, `loop` with Stages 3.
+- Fixed colours per lamp: `all` with `hold` and `per lamp` colours on any palette.
+- Front and back, or two corners: the `split` pattern with the Hue device's light order set to `Front to back` or `Around the room`.
