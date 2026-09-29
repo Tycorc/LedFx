@@ -1,6 +1,5 @@
-"""Disco: sound to light for a room of smart bulbs, hueDynamic style."""
+"""Disco: sound to light for a room of smart bulbs."""
 
-import re
 import timeit
 from collections import deque
 from typing import ClassVar
@@ -19,19 +18,16 @@ CHANNEL_LETTERS = "BVT"
 CHANNEL_NAMES = ["bass", "voice", "treble"]
 
 
-def validate_light_map(value):
-    value = str(value).upper().replace(" ", "")
-    if not re.fullmatch(r"[BVT\-]*", value):
-        raise vol.Invalid(
-            "Light map may only contain B, V, T and - (one letter per lamp)"
-        )
-    return value
+def normalise_light_map(value):
+    """Upper case the map, drop spaces and turn unknown letters into -."""
+    value = str(value or "").upper().replace(" ", "")
+    return "".join(letter if letter in CHANNEL_LETTERS else "-" for letter in value)
 
 
 class DiscoEffect(AudioReactiveEffect, GradientEffect):
     """
-    Sound to light in the style of the "Disco" modes of Hue apps such as
-    hueDynamic, for setups where every pixel is a whole lamp.
+    Sound to light in the style of the disco modes of smart bulb party
+    apps, for setups where every pixel is a whole lamp.
 
     Three analysers:
 
@@ -211,7 +207,7 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
                 "light_map",
                 description="Channel per lamp, e.g. BVTBV. B bass, V voice, T treble, - off. Overrides the assignment",
                 default="",
-            ): validate_light_map,
+            ): vol.All(vol.Coerce(str), vol.Length(max=256)),
             vol.Optional(
                 "zones",
                 description="Number of lamps / zones to split the output into. 0 = auto (one per pixel for bulbs)",
@@ -398,7 +394,7 @@ class DiscoEffect(AudioReactiveEffect, GradientEffect):
         channels = [i for i in range(3) if self.enabled[i]]
         lamp_channel = np.full(n, -1, dtype=int)
 
-        light_map = self._config["light_map"]
+        light_map = normalise_light_map(self._config["light_map"])
         if self.mode == "Peak":
             lamp_channel[:] = 0
         elif light_map:

@@ -5,10 +5,9 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-import voluptuous as vol
 
 from ledfx.effects import Effect
-from ledfx.effects.disco import DiscoEffect, validate_light_map
+from ledfx.effects.disco import DiscoEffect, normalise_light_map
 
 # A melbank style frequency axis, 64 log spaced bins from 20 Hz to 15 kHz
 FREQS = np.geomspace(20, 15000, 64)
@@ -113,10 +112,18 @@ def test_light_map_ignores_disabled_channels():
     assert list(effect._lamp_channel) == [0, 1, -1]
 
 
-def test_light_map_rejects_other_letters():
-    assert validate_light_map(" b v t ") == "BVT"
-    with pytest.raises(vol.Invalid):
-        validate_light_map("BVX")
+def test_light_map_normalises_letters():
+    assert normalise_light_map(" b v t ") == "BVT"
+    # Unknown letters are lamps that stay off
+    assert normalise_light_map("BVX") == "BV-"
+    assert normalise_light_map(None) == ""
+
+
+def test_light_map_schema_is_a_plain_string():
+    from ledfx.api.utils import convertToJsonSchema
+
+    schema = convertToJsonSchema(DiscoEffect.schema())
+    assert schema["properties"]["light_map"]["type"] == "string"
 
 
 def test_peak_mode_puts_every_lamp_on_the_peak_channel():
