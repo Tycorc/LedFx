@@ -468,7 +468,8 @@ jobs:
           # Release builds never touch a cache: a tag run can read caches written on main.
           no-cache: ${{ needs.plan.outputs.release == 'true' }}
           cache-from: ${{ needs.plan.outputs.release != 'true' && format('type=registry,ref={0}:cache-{1}', env.GHCR_IMAGE, matrix.arch) || '' }}
-          cache-to: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && format('type=registry,ref={0}:cache-{1},mode=max', env.GHCR_IMAGE, matrix.arch) || '' }}
+          # Writing the cache needs the GHCR login, which only PUBLISH runs have; a fork would 403.
+          cache-to: ${{ env.PUBLISH == 'true' && github.ref == 'refs/heads/main' && format('type=registry,ref={0}:cache-{1},mode=max', env.GHCR_IMAGE, matrix.arch) || '' }}
           build-args: |
             GITHUB_SHA=${{ github.sha }}
             IS_RELEASE=${{ needs.plan.outputs.release }}
