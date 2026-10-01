@@ -7,7 +7,6 @@ dependencies = [
     "cffi>=0.16.0",
     "wheel>=0.36.2",
     "aiohttp>=3.9.1,<4.0.0",
-    "aiohttp-cors>=0.7.0",
     "aubio-ledfx>=0.4.11",
     "cython>=3.0.7",
     "certifi>=2023.11.17",
@@ -49,7 +48,7 @@ dependencies = [
     "dbus-fast>=5.0.22,<6.0.0; sys_platform == \"linux\"",
 ]
 name = "LedFx"
-version = "2.1.9"
+version = "2.2.0"
 description = "A network based light effect controller"
 readme = "README.rst"
 
@@ -62,8 +61,7 @@ dev = [
     "pytest-timeout>=2.3.0,<3.0.0",
     "lifx-emulator-core>=3.8.0",
     "prek>=0.5.3",
-    # Keep in sync with the ruff-pre-commit rev in .pre-commit-config.yaml
-    "ruff==0.16.7",
+    "ruff==0.16.8",
 ]
 build = ["pyinstaller<7.0.0,>=6.3.0"]
 docs = [
