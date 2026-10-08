@@ -17,15 +17,7 @@ class NotifyEndpoint(RestEndpoint):
         self.icon = ledfx.icon
 
     async def put(self, request: web.Request) -> web.Response:
-        """
-        Handle the PUT request for notifications.
-
-        Args:
-            request (web.Request): The request object containing the notification `title` and `text`.
-
-        Returns:
-            web.Response: The response object.
-        """
+        """Handle the PUT request for notifications."""
         try:
             data = await request.json()
         except JSONDecodeError:

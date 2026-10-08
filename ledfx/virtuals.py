@@ -203,8 +203,6 @@ class Virtual:
     def __init__(self, ledfx, config: VirtualConfig):
         self._ledfx = ledfx
         self._config = config
-        # the multiplier to fade in/out of an effect. -ve values mean fading
-        # in, +ve mean fading out
         self.fade_timer = 0
         self._segments = []
         self._calibration = False
@@ -226,8 +224,6 @@ class Virtual:
         self._streaming = False
         self.complex_segments = config.complex_segments
 
-        # Precompiled device remap structure for fast pixel mapping
-        # Maps virtual indices to device indices per device
         self._device_remap: dict = {}
 
         self._debug_flush_total = 0.0
@@ -247,12 +243,8 @@ class Virtual:
         self.active = False
 
     def activate_segments(self, segments):
-        # Always use optimized batch mode for segment activation
-        # Group segments by device for batch adding
         segments_by_device = {}
         for device_id, start_pixel, end_pixel, _invert in segments:
-            # Skip gap devices - they are configuration placeholders, never
-            # registered in the device registry (so device will be None)
             if device_id.startswith("gap-"):
                 continue
             device = self._ledfx.devices.get(device_id)
@@ -384,9 +376,6 @@ class Virtual:
                 # Compile device remap structure for fast pixel mapping
                 self._compile_device_remap()
 
-                # Restart active effect if total pixel count has changed
-                # eg. devices might be reordered, but total pixel count is same
-                # so no need to restart the effect
                 if self.pixel_count != _pixel_count:
                     # chenging segments is a deep edit, just flush any transition
                     try:
@@ -840,16 +829,9 @@ class Virtual:
                         and self._active_effect.is_active
                         and hasattr(self._active_effect, "pixels")
                     ):
-                        # self.assembled_frame = await self._ledfx.loop.run_in_executor(
-                        #     self._ledfx.thread_executor, self.assemble_frame
-                        # )
                         self.assembled_frame = self.assemble_frame()
                         if self.assembled_frame is not None and not self._paused:
                             if not self._config.preview_only:
-                                # self._ledfx.thread_executor.submit(self.flush)
-                                # await self._ledfx.loop.run_in_executor(
-                                #     self._ledfx.thread_executor, self.flush
-                                # )
                                 self.flush()
 
                             self._fire_update_event()
@@ -864,9 +846,6 @@ class Virtual:
             sleep_time = max(0.001, fps_to_sleep_interval(self.refresh_rate) - run_time)
             time.sleep(sleep_time)
 
-            # use an aggressive check for did we sleep against expected min clk
-            # for all high res scenarios this will be passive
-            # for unexpected high res sleep on windows scenarios it will adapt
             pass_time = time.perf_counter() - start_time
             if pass_time < (self._min_time / 2):
                 time.sleep(max(0.001, self._min_time - pass_time))
@@ -979,20 +958,8 @@ class Virtual:
         self._ledfx.events.fire_event(VirtualPauseEvent(self.id, not self._active))
         self._ledfx.virtuals.check_and_deactivate_devices()
 
-    # @lru_cache(maxsize=32)
-    # def _normalized_linspace(self, size):
-    #     return np.linspace(0, 1, size)
-
     # def interp_channel(self, channel, x_new, x_old):
     #     return np.interp(x_new, x_old, channel)
-
-    # # TODO cache this!
-    # # need to be able to access pixels but not through args
-    # # @lru_cache(maxsize=8)
-    # def interpolate(self, pixels, new_length):
-    #     """Resizes the array by linearly interpolating the values"""
-    #     if len(pixels) == new_length:
-    #         return pixels
 
     #     x_old = self._normalized_linspace(len(pixels))
     #     x_new = self._normalized_linspace(new_length)
@@ -1095,9 +1062,6 @@ class Virtual:
                         target_effect_len = self._get_effective_pixel_count(
                             target_physical_len
                         )
-                        # In copy mode, we need to scale the effect and afterwards expand the
-                        # pixel groups separately for every segment, because pre-calculating once
-                        # and scaling would lead to incorrect pixel group lengths.
                         seg = interpolate_pixels(pixels, target_effect_len)[::step]
                         seg = self._effective_to_physical_pixels(
                             seg, target_physical_len
@@ -1533,11 +1497,6 @@ class Virtuals:
         return cls._instance
 
     def __init__(self, ledfx):
-        # Always update the reference to the current LedFx core instance.
-        # Virtuals is implemented as a singleton and may be instantiated
-        # multiple times across different LedFxCore lifecycles; binding
-        # _ledfx unconditionally ensures we reference the correct
-        # Devices/Events registries when restoring from config.
         self._ledfx = ledfx
 
         if not hasattr(self, "_initialized"):  # Ensure one-time init
@@ -1580,10 +1539,6 @@ class Virtuals:
                     )
                     continue
 
-            # Pre-check: skip effect restore if the virtual has no valid
-            # device segments.  This prevents a ValueError crash when a
-            # poisoned config (e.g. virtual whose device was deleted) is
-            # loaded at startup.
             if entry.effect is not None and not new_virtual._devices:
                 _LOGGER.warning(
                     "Virtual %s has no device segments; skipping "

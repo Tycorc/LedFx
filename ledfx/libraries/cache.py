@@ -24,8 +24,9 @@ _R = TypeVar("_R")
 def _locked(
     method: "Callable[Concatenate[ImageCache, _P], _R]",
 ) -> "Callable[Concatenate[ImageCache, _P], _R]":
-    """Image loads run in worker threads (asyncio.to_thread) as well as on the
-    loop, and every public method reads or rewrites the shared metadata."""
+    """Image loads run in worker threads (asyncio.to_thread) as well as on the loop,
+    and every public method reads or rewrites the shared metadata.
+    """
 
     @functools.wraps(method)
     def wrapper(self: "ImageCache", *args: _P.args, **kwargs: _P.kwargs) -> _R:
@@ -36,15 +37,7 @@ def _locked(
 
 
 class ImageCache:
-    """
-    Manages cached images from remote URLs.
-
-    Cache Policy:
-    - No automatic expiration (cache and keep)
-    - No TTL-based refresh
-    - LRU eviction when size/count limits exceeded
-    - Explicit refresh/clear only via API
-    """
+    """Persistent image cache with LRU limits and explicit refresh; no TTL."""
 
     def __init__(
         self,
@@ -52,14 +45,7 @@ class ImageCache:
         max_size_mb: int = 500,
         max_items: int = 500,
     ):
-        """
-        Initialize image cache.
-
-        Args:
-            config_dir: LedFx configuration directory
-            max_size_mb: Maximum cache size in megabytes (default 500)
-            max_items: Maximum number of cached items (default 500)
-        """
+        """Initialize image cache."""
         self.cache_dir = os.path.join(config_dir, "cache", "images")
         os.makedirs(self.cache_dir, exist_ok=True)
         self.metadata_file = os.path.join(self.cache_dir, "metadata.json")
@@ -89,19 +75,8 @@ class ImageCache:
             _LOGGER.error("Failed to save cache metadata: %s", e)
 
     def _generate_cache_key(self, url: str, params: dict | None = None) -> str:
-        """
-        Generate cache key from URL and optional parameters using SHA-256 hash.
-
-        Args:
-            url: The URL or asset path
-            params: Optional dict of parameters to include in cache key
-                    (e.g., {"size": 128, "dimension": "max", "animated": True})
-
-        Returns:
-            SHA-256 hash of the combined URL and parameters
-        """
+        """Hash URL and sorted parameters so thumbnail variants have distinct keys."""
         if params:
-            # Sort params by key for consistent hashing
             sorted_params = sorted(params.items())
             key_str = f"{url}|{sorted_params}"
         else:
@@ -114,23 +89,13 @@ class ImageCache:
 
     @_locked
     def get(self, url: str, params: dict | None = None) -> str | None:
-        """
-        Get cached image if available (no expiration check).
-
-        Args:
-            url: The URL or asset path to retrieve from cache
-            params: Optional dict of parameters (for thumbnails)
-
-        Returns:
-            Path to cached file or None if not cached
-        """
+        """Get cached image if available (no expiration check)."""
         cache_key = self._generate_cache_key(url, params)
         entry = self.metadata["cache_entries"].get(cache_key)
 
         if entry:
             cache_path = self._get_cache_path(cache_key, entry["extension"])
             if os.path.exists(cache_path):
-                # Update access tracking
                 entry["last_accessed"] = datetime.now(UTC).isoformat()
                 entry["access_count"] = entry.get("access_count", 0) + 1
                 self._save_metadata()
@@ -149,23 +114,9 @@ class ImageCache:
         last_modified: str | None = None,
         params: dict | None = None,
     ):
-        """
-        Store image in cache with extracted metadata.
-
-        Automatically extracts and stores image metadata including dimensions,
-        format, frame count, and animation status for cached images.
-
-        Args:
-            url: The URL or asset path of the image
-            data: Image data bytes
-            content_type: MIME type of the image
-            etag: Optional ETag header from server
-            last_modified: Optional Last-Modified header from server
-            params: Optional dict of parameters (for thumbnails)
-        """
+        """Store image in cache with extracted metadata."""
         cache_key = self._generate_cache_key(url, params)
 
-        # Determine extension from content type
         extension_map = {
             "image/gif": ".gif",
             "image/png": ".png",
@@ -190,14 +141,10 @@ class ImageCache:
             _LOGGER.error("Failed to write cache file %s: %s", cache_path, e)
             return
 
-        # Update metadata
         now = datetime.now(UTC).isoformat()
 
-        # Extract image metadata (dimensions, frame count, animation status)
         width, height, img_format, n_frames, is_animated = get_image_metadata(tmp_path)
 
-        # Extract gradient metadata only for original images, not thumbnails
-        # Thumbnails have params, original images don't
         gradient_data = None
         if params is None:
             try:
@@ -209,7 +156,6 @@ class ImageCache:
                     e,
                     exc_info=False,
                 )
-                # Continue without gradients - not a critical failure
 
         entry = {
             "url": url,
@@ -241,7 +187,6 @@ class ImageCache:
                     os.remove(tmp_path)
                 return
 
-            # Remove old entry size if updating
             old = self.metadata["cache_entries"].get(cache_key)
             if old is not None:
                 self.metadata["total_size"] -= old["file_size"]
@@ -271,7 +216,6 @@ class ImageCache:
             if not self.metadata["cache_entries"]:
                 break
 
-            # Find LRU entry (least recently accessed, lowest access count as tiebreaker)
             lru_key = min(
                 self.metadata["cache_entries"].items(),
                 key=lambda x: (
@@ -287,7 +231,6 @@ class ImageCache:
             self._delete(lru_key)
             evicted = True
 
-        # Persist metadata changes after eviction
         if evicted:
             self._save_metadata()
 
@@ -309,16 +252,7 @@ class ImageCache:
 
     @_locked
     def delete(self, url: str, params: dict | None = None) -> bool:
-        """
-        Remove specific URL (and params) from cache.
-
-        Args:
-            url: The URL or asset path to remove
-            params: Optional dict of parameters (for thumbnails)
-
-        Returns:
-            True if entry was deleted, False if not found
-        """
+        """Remove specific URL (and params) from cache."""
         cache_key = self._generate_cache_key(url, params)
         if cache_key in self.metadata["cache_entries"]:
             _LOGGER.info("Deleting cached image: %s (params: %s)", url, params)
@@ -329,25 +263,16 @@ class ImageCache:
 
     @_locked
     def delete_all_for_url(self, url: str) -> int:
-        """
-        Remove all cache entries for a given URL (regardless of params).
-        Useful for clearing all thumbnail variations of an asset.
-
-        Args:
-            url: The URL or asset path to remove
-
-        Returns:
-            Number of entries deleted
+        """Remove all cache entries for a given URL (regardless of params). Useful
+        for clearing all thumbnail variations of an asset.
         """
         deleted_count = 0
         keys_to_delete = []
 
-        # Find all entries matching the URL
         for cache_key, entry in self.metadata["cache_entries"].items():
             if entry["url"] == url:
                 keys_to_delete.append(cache_key)
 
-        # Delete found entries
         for cache_key in keys_to_delete:
             self._delete(cache_key)
             deleted_count += 1
@@ -360,12 +285,7 @@ class ImageCache:
 
     @_locked
     def clear(self) -> dict:
-        """
-        Clear entire cache.
-
-        Returns:
-            Dict with cleared_count and freed_bytes
-        """
+        """Clear entire cache."""
         cleared_count = len(self.metadata["cache_entries"])
         freed_bytes = self.metadata["total_size"]
 
@@ -383,31 +303,7 @@ class ImageCache:
 
     @_locked
     def get_stats(self) -> dict:
-        """
-        Get cache statistics with image metadata.
-
-        Returns:
-            Dict with cache statistics including:
-            - total_size: Total cache size in bytes
-            - total_count: Total number of cached items
-            - max_size: Maximum cache size in bytes
-            - max_count: Maximum number of items
-            - entries: List of cache entries, each containing:
-                - url: Source URL
-                - cached_at: Timestamp when cached
-                - last_accessed: Last access timestamp
-                - access_count: Number of accesses
-                - file_size: File size in bytes
-                - content_type: MIME type
-                - width: Image width in pixels
-                - height: Image height in pixels
-                - format: Image format (PNG, JPEG, GIF, etc.)
-                - n_frames: Number of frames (1 for static, >1 for animated)
-                - is_animated: Boolean flag for animation
-                - gradients: Extracted gradient metadata (all variants) or None
-
-            Note: Excludes thumbnail cache entries (entries with params or URLs starting with "asset://").
-        """
+        """Return cache totals and image metadata, excluding thumbnail variants."""
         entries = [
             {
                 "url": entry["url"],
@@ -427,7 +323,6 @@ class ImageCache:
             if not entry["url"].startswith("asset://") and entry.get("params") is None
         ]
 
-        # Sort by access_count descending
         entries.sort(key=lambda x: x["access_count"], reverse=True)
 
         return {
@@ -440,16 +335,7 @@ class ImageCache:
 
     @_locked
     def get_cache_headers(self, url: str, params: dict | None = None) -> dict | None:
-        """
-        Get stored ETag and Last-Modified headers for conditional requests.
-
-        Args:
-            url: The URL to get headers for
-            params: Optional dict of parameters (for thumbnails)
-
-        Returns:
-            Dict with etag and last_modified or None if not cached
-        """
+        """Get stored ETag and Last-Modified headers for conditional requests."""
         cache_key = self._generate_cache_key(url, params)
         entry = self.metadata["cache_entries"].get(cache_key)
 

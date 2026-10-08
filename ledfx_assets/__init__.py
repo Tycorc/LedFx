@@ -1,5 +1,3 @@
-"""ledfx_assets"""
-
 import os
 
 

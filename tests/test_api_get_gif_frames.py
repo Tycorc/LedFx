@@ -15,7 +15,6 @@ from PIL import Image
 
 from tests.test_utilities.consts import BASE_PORT
 
-# Test URL
 GIF_FRAMES_API_URL = f"http://127.0.0.1:{BASE_PORT}/api/get_gif_frames"
 ASSETS_API_URL = f"http://127.0.0.1:{BASE_PORT}/api/assets"
 
@@ -24,12 +23,10 @@ ASSETS_API_URL = f"http://127.0.0.1:{BASE_PORT}/api/assets"
 def sample_animated_gif_bytes():
     """Generate sample animated GIF image bytes (3 frames)."""
     frames = []
-    # Create 3 frames with different colors
     for color in ["red", "green", "blue"]:
         img = Image.new("RGB", (50, 50), color=color)
         frames.append(img)
 
-    # Save as animated GIF
     img_bytes = io.BytesIO()
     frames[0].save(
         img_bytes,
@@ -53,7 +50,6 @@ class TestGetGifFramesAPI:
         This is the most common use case - a user uploads an asset
         and references it by filename only.
         """
-        # First, upload a GIF asset
         files = {
             "file": (
                 "test_anim.gif",

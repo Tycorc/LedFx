@@ -27,7 +27,6 @@ from PIL import Image
 
 from tests.test_utilities.consts import BASE_PORT
 
-# API endpoints - Use 127.0.0.1 instead of localhost to avoid Windows DNS resolution delay
 ASSETS_API_URL = f"http://127.0.0.1:{BASE_PORT}/api/assets"
 ASSETS_DOWNLOAD_API_URL = f"http://127.0.0.1:{BASE_PORT}/api/assets/download"
 ASSETS_THUMBNAIL_API_URL = f"http://127.0.0.1:{BASE_PORT}/api/assets/thumbnail"
@@ -66,12 +65,10 @@ class TestAssetsDownloadCachedURL:
         Uses mocking to simulate URL fetch failure without actual network calls.
         This is fast, deterministic, and doesn't depend on external network.
         """
-        # Simulate URLError (connection timeout/refused)
         mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
 
         test_url = "https://example.com/not_in_cache.gif"
 
-        # GET method
         resp = requests.get(
             ASSETS_DOWNLOAD_API_URL,
             params={"path": test_url},
@@ -80,13 +77,11 @@ class TestAssetsDownloadCachedURL:
         assert resp.status_code == 200
         result = resp.json()
         assert result["status"] == "failed"
-        # Should return download/fetch error or validation error
         assert any(
             keyword in result["payload"]["reason"].lower()
             for keyword in ["download", "fetch", "failed", "validate", "url"]
         )
 
-        # POST method
         resp = requests.post(
             ASSETS_DOWNLOAD_API_URL,
             json={"path": test_url},
@@ -96,7 +91,6 @@ class TestAssetsDownloadCachedURL:
         assert resp.status_code == 200
         result = resp.json()
         assert result["status"] == "failed"
-        # Should return download/fetch error or validation error
         assert any(
             keyword in result["payload"]["reason"].lower()
             for keyword in ["download", "fetch", "failed", "validate", "url"]
@@ -115,7 +109,6 @@ class TestAssetsThumbnailCachedURL:
         Uses mocking to simulate URL fetch failure without actual network calls.
         This is fast, deterministic, and doesn't depend on external network.
         """
-        # Simulate URLError (connection timeout/refused)
         mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
 
         test_url = "https://example.com/not_in_cache.gif"
@@ -129,7 +122,6 @@ class TestAssetsThumbnailCachedURL:
         assert resp.status_code == 200
         result = resp.json()
         assert result["status"] == "failed"
-        # Should return download/fetch error or validation error
         assert any(
             keyword in result["payload"]["reason"].lower()
             for keyword in ["download", "fetch", "failed", "validate", "url"]
@@ -142,7 +134,6 @@ class TestCachedURLIntegration:
 
     def test_non_url_paths_still_work(self):
         """Test that regular asset paths are unaffected."""
-        # Regular user asset path
         resp = requests.get(
             ASSETS_DOWNLOAD_API_URL,
             params={"path": "nonexistent.gif"},
@@ -153,7 +144,6 @@ class TestCachedURLIntegration:
         assert result["status"] == "failed"
         assert "not found" in result["payload"]["reason"].lower()
 
-        # Builtin asset path
         resp = requests.get(
             ASSETS_DOWNLOAD_API_URL,
             params={"path": "builtin://nonexistent.gif"},
@@ -174,8 +164,6 @@ class TestURLDownloadWithExternalURL:
     if network is unavailable.
     """
 
-    # Use GitHub raw content URLs as reliable test image sources
-    # These URLs have proper file extensions and are highly available
     TEST_PNG_URL = (
         "https://raw.githubusercontent.com/github/explore/main/topics/python/python.png"
     )
@@ -183,7 +171,6 @@ class TestURLDownloadWithExternalURL:
 
     def test_download_url_successfully(self):
         """Test successful URL download and caching."""
-        # First request should download from URL
         resp = requests.get(
             ASSETS_DOWNLOAD_API_URL,
             params={"path": self.TEST_PNG_URL},
@@ -193,17 +180,14 @@ class TestURLDownloadWithExternalURL:
         assert resp.headers["Content-Type"] == "image/png"
         assert len(resp.content) > 0
 
-        # Verify it's a valid image
         img = Image.open(io.BytesIO(resp.content))
         assert img.format == "PNG"
         assert img.size[0] > 0 and img.size[1] > 0
 
-        # Verify image was cached
         cache_resp = requests.get(CACHE_API_URL, timeout=10)
         assert cache_resp.status_code == 200
         cache_data = cache_resp.json()
 
-        # Find our cached URL in the response
         cached_entries = [
             entry
             for entry in cache_data["entries"]

@@ -45,18 +45,6 @@ class Line:
         self.segment = segment
 
     def update(self, run_seconds, passed, tail, impulse):
-        ###
-        # Update the line's position
-        #
-        # Args:
-        #   run_seconds (float): The number of seconds for a line to run from top to bottom.
-        #   passed (float): The number of seconds since the last update.
-        #   tail (float): The length of the line's tail.
-        #   impulse (list): The impulse array from the audio data.
-        #
-        # Returns:
-        #   bool: True if the line is still visible, False otherwise.
-        ###
 
         # calculate how much to move
         movement = passed / run_seconds * (1 + impulse[self.impulse_index])

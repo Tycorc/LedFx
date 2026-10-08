@@ -16,15 +16,7 @@ class DeviceEndpoint(RestEndpoint):
     ENDPOINT_PATH = "/api/devices/{device_id}"
 
     async def get(self, device_id) -> web.Response:
-        """
-        Get the configuration of a device.
-
-        Args:
-            device_id (str): The ID of the device.
-
-        Returns:
-            web.Response: The response containing the device configuration.
-        """
+        """Get the configuration of a device."""
         device = self._ledfx.devices.get(device_id)
         if device is None:
             return await self.invalid_request(f"Device {device_id} was not found")
@@ -33,16 +25,7 @@ class DeviceEndpoint(RestEndpoint):
         return await self.bare_request_success(response)
 
     async def put(self, device_id, request) -> web.Response:
-        """
-        Update the configuration of a device.
-
-        Args:
-            device_id (str): The ID of the device.
-            request (web.Request): The request object containing device `config`.
-
-        Returns:
-            web.Response: The response indicating the success or failure of the update.
-        """
+        """Update the configuration of a device."""
         device = self._ledfx.devices.get(device_id)
         if device is None:
             return await self.invalid_request(f"Device with ID {device_id} not found")
@@ -68,8 +51,6 @@ class DeviceEndpoint(RestEndpoint):
             error_message = f"Error updating device {device_id}: {msg}"
             _LOGGER.warning(error_message)
             return await self.invalid_request(error_message)
-        # Update and save the configuration
-        # Persist the merged, validated config: a partial PUT must not drop keys.
         entry = self._ledfx.config_store.device_entry(device_id)
         if entry is not None:
             entry.config = device.config.as_dict()
@@ -77,16 +58,7 @@ class DeviceEndpoint(RestEndpoint):
         return await self.request_success()
 
     async def post(self, device_id, request) -> web.Response:
-        """
-        Handle POST request for a device.
-
-        Args:
-            device_id (str): The ID of the device.
-            request (web.Request): The request object. Not currently used.
-
-        Returns:
-            web.Response: The response object.
-        """
+        """Handle POST request for a device."""
         if device_id is None:
             return await self.invalid_request("No `device_id` provided")
         device = self._ledfx.devices.get(device_id)
@@ -113,15 +85,7 @@ class DeviceEndpoint(RestEndpoint):
         return await self.bare_request_success(response)
 
     async def delete(self, device_id) -> web.Response:
-        """
-        Deletes a device with the specified device_id.
-
-        Args:
-            device_id (str): The ID of the device to be deleted.
-
-        Returns:
-            web.Response: The response indicating the success or failure of the delete operation.
-        """
+        """Deletes a device with the specified device_id."""
         if device_id is None:
             return await self.invalid_request("No device ID provided")
         device = self._ledfx.devices.get(device_id)
@@ -130,13 +94,9 @@ class DeviceEndpoint(RestEndpoint):
             _LOGGER.info(error_message)
             return await self.invalid_request(error_message)
 
-        # TODO: this function does not exist, no one calls this API!
-        # TODO: see https://github.com/LedFx/LedFx/issues/1226
-        # device.clear_effect()
         device.remove_from_virtuals()
         self._ledfx.devices.destroy(device_id)
 
-        # Update and save the configuration
         self._ledfx.config.devices = [
             device for device in self._ledfx.config.devices if device.id != device_id
         ]

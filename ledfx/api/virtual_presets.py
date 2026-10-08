@@ -76,7 +76,6 @@ class VirtualPresetsEndpoint(RestEndpoint):
 
         custom = inject_missing_default_keys(custom, default)
 
-        # Add active flags to presets based on current effect config
         active_effect_config = virtual.active_effect.config
         default_with_active = self._add_active_flags(default, active_effect_config)
         custom_with_active = self._add_active_flags(custom, active_effect_config)
@@ -154,7 +153,6 @@ class VirtualPresetsEndpoint(RestEndpoint):
                     f"Preset {preset_id} does not exist for effect {effect_id} in category {category}"
                 )
             else:
-                # Create the effect and add it to the virtual
                 effect_config = preset_config(
                     user_presets, category, effect_id, preset_id
                 )
@@ -214,13 +212,11 @@ class VirtualPresetsEndpoint(RestEndpoint):
             return await self.invalid_request(
                 'Required attribute "name" was not provided'
             )
-        # Validate before touching user_presets.
         preset = Preset(name=preset_name, config=virtual.active_effect.config.as_dict())
 
         preset_id = generate_id(preset_name)
         effect_id = virtual.active_effect.type
 
-        # Update the preset if it already exists, else create it
         self._ledfx.config.user_presets.setdefault(effect_id, {})[preset_id] = preset
 
         self._ledfx.config_store.request_save()
@@ -237,7 +233,6 @@ class VirtualPresetsEndpoint(RestEndpoint):
 
     async def delete(self, virtual_id) -> web.Response:
         # TODO: This API is not currently used
-        # TODO: https://github.com/LedFx/LedFx/issues/1231
         """Delete a virtual preset.
 
         Args:

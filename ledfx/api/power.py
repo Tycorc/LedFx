@@ -8,7 +8,6 @@ from ledfx.api import RestEndpoint
 
 _LOGGER = logging.getLogger(__name__)
 
-# Longest delay, in seconds, a shutdown or restart may be scheduled for.
 MAX_POWER_TIMEOUT = 3600
 
 

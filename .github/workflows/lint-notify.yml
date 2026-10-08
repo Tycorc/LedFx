@@ -1,22 +1,3 @@
-# Posts the "lint gate failed, autofix couldn't fix it" comment on pull requests.
-#
-# Runs in the trusted workflow_run context: GitHub executes *this file from
-# the default branch*, not from the PR, so pull-request code cannot touch it
-# and the ledfx-automation secrets are available here — they are never
-# available to ci.yml, which runs pull-request code.
-#
-# Noise policy (deliberate): comment ONLY when the lint gate failed AND the
-# autofix workflow is not already pushing a fix. When autofix has started (or
-# already succeeded, pushing a fix commit that re-triggers CI), the comment
-# would be noise about a problem that is fixing itself.
-#
-# The triggering run's own conclusion is the signal (no success/fail payload
-# is passed between workflows): this workflow looks up the Lint (prek) job of
-# that run and the sibling autofix run for the same commit. Two tokens,
-# minimal surfaces:
-#   - GITHUB_TOKEN (actions: read) reads job conclusions.
-#   - ledfx-automation app token (pull-requests: write) posts the comment,
-#     so it authors as ledfx-automation[bot] and notifies subscribers.
 
 name: Lint failure notify
 

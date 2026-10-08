@@ -11,18 +11,12 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-# Default Sendspin server configuration
 DEFAULT_SERVER_URL = "ws://192.168.1.12:8927/sendspin"
 DEFAULT_CLIENT_NAME = "LedFx"
 
-# Device identification sent in the Sendspin client/hello handshake
 PRODUCT_NAME = "LedFx"
 MANUFACTURER = "LedFx Developers"
 
-# Buffer capacity advertised to the Sendspin server during ClientHello.
-# The server sends audio up to this many bytes ahead of the current play
-# position.  ~2 seconds at 48 kHz / 16-bit / stereo (192 000 B/s) gives
-# enough headroom for network jitter while keeping latency reasonable.
 BUFFER_CAPACITY = 384000
 
 
@@ -36,21 +30,7 @@ class _LedFx(Protocol):
 
 
 def validate_sendspin_server_url(url: object) -> tuple[bool, str]:
-    """Validate a Sendspin server WebSocket URL.
-
-    Checks:
-    - Input must be a string (returns False instead of raising AttributeError)
-    - Leading/trailing whitespace is allowed by callers who strip first; this
-      function validates the already-stripped value
-    - Scheme must be "ws" or "wss"
-    - Hostname must be non-empty
-    - Port, if present, must be in the valid range 0-65535
-    - Path must not contain null bytes or path-traversal sequences
-
-    Returns:
-        (True, "")            — URL is valid
-        (False, reason_str)   — URL is invalid, reason describes why
-    """
+    """Return (valid, reason) for an already-stripped ws/wss server URL."""
     if not isinstance(url, str):
         return False, "server_url must be a string"
 
@@ -90,16 +70,7 @@ def is_always_on(
     query_devices: Callable[[], Sequence[Mapping[str, object]]],
     query_hostapis: Callable[[], Sequence[Mapping[str, object]]],
 ) -> bool:
-    """Check if the audio device at device_idx is a Sendspin device.
-
-    Args:
-        device_idx: The audio device index to check.
-        query_devices: Callable returning the full device tuple.
-        query_hostapis: Callable returning the host API tuple.
-
-    Returns:
-        True if the device is a Sendspin server.
-    """
+    """Check if the audio device at device_idx is a Sendspin device."""
     if not isinstance(device_idx, int) or device_idx < 0:
         return False
     try:
@@ -122,12 +93,8 @@ def is_always_on(
 
 
 def eager_start(ledfx: _LedFx) -> None:
-    """Eagerly start the audio subsystem if sendspin_always_on is enabled
-    and the configured audio device is a Sendspin source.
-
-    Called from core startup after sendspin servers are loaded so the
-    Sendspin audio stream begins immediately, even when no audio-reactive
-    effect is active yet.
+    """Start always-on Sendspin audio after servers load, without waiting for an
+    effect.
     """
     config = ledfx.config
     if not config.sendspin_always_on:
@@ -144,13 +111,8 @@ def eager_start(ledfx: _LedFx) -> None:
         config.sendspin_always_on,
     )
 
-    # Lazy import to break circular dependency:
-    # audio.py → sendspin/config.py → audio.py
     from ledfx.effects.audio import AudioAnalysisSource, AudioInputSource
 
-    # Check by name first (more reliable than index which can shift when the
-    # number of sounddevice devices changes between sessions).  Fall back to
-    # the index-based check for configs that pre-date name persistence.
     name_is_sendspin = device_name.startswith("SENDSPIN:")
     idx_is_sendspin = is_always_on(
         device_idx,
@@ -174,10 +136,7 @@ def eager_start(ledfx: _LedFx) -> None:
 
     existing_audio = ledfx.audio
     if existing_audio is not None:
-        # Runtime path: apply current config and allow audio.py to activate
-        # immediately when always-on + Sendspin conditions are met.
         existing_audio.update_config(audio_config)
         return
 
-    # Boot-time path: no audio instance exists yet.
     ledfx.audio = AudioAnalysisSource(ledfx, audio_config)

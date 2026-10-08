@@ -12,51 +12,23 @@ RGB = namedtuple("RGB", ("red", "green", "blue"))
 
 
 class Gradient:
-    """
-    Represents a gradient with a list of colors and a mode.
-
-    Attributes:
-        colors (list): A list of tuples representing colors and their positions in the gradient.
-        mode (str): The mode of the gradient (e.g., "linear", "radial").
-        angle (str): The angle of the gradient (e.g., "90deg").
-
-    Methods:
-        from_string(cls, gradient_str: str) -> Gradient: Parses a gradient from a string.
-    """
+    """Represents a gradient with a list of colors and a mode."""
 
     __slots__ = "angle", "colors", "mode"
 
     @classmethod
     def from_string(cls, gradient_str: str):
-        """
-        Parses a gradient from a string of the format:
-        "linear-gradient(90deg, rgb(100, 0, 255) 0%, #800000 50%, #ec77ab 100%)"
-        or
-        "mode(angle, *colors)"
-        where each color is associated with a % value for its position in the gradient.
-
-        Args:
-            gradient_str (str): The string representation of the gradient.
-
-        Returns:
-            Gradient: The parsed gradient object.
-        """
-        # If gradient is predefined, get the definition
+        """Parse CSS-style mode(angle, color position%, ...) gradient strings."""
         gradient_str = LEDFX_GRADIENTS.get(gradient_str, gradient_str)
-        # Get mode
         mode, angle_colors = gradient_str.split("(", 1)
         mode.strip("-gradient")
-        # Get angle
         angle, colors = angle_colors.strip(")").split(",", 1)
         angle = int(angle.strip("deg"))
-        # Split each color/position string
         colors = colors.split("%")
         colors = [color.strip(", ").rsplit(" ", 1) for color in colors if color.strip()]
-        # Parse color and position
         colors = [
             (parse_color(color), float(position) / 100.0) for color, position in colors
         ]
-        # Sort color list by position (0.0->1.0)
         colors.sort(key=lambda tup: tup[1])
 
         return cls(colors, mode, angle)
@@ -67,18 +39,14 @@ class Gradient:
         self.angle = angle
 
     def sample(self, position: float) -> str:
-        """
-        Return a hex color string sampled from this Gradient at a normalized
+        """Return a hex color string sampled from this Gradient at a normalized
         position in [0.0, 1.0].
         """
         pos = max(0.0, min(1.0, float(position)))
 
-        # Expecting self.colors as iterable of (RGB, pos) pairs
         stops = list(self.colors)
-        # Ensure sorted by position
         stops.sort(key=lambda c: c[1])
 
-        # Fast bounds
         first_color, first_pos = stops[0]
         last_color, last_pos = stops[-1]
         if pos <= first_pos:
@@ -88,7 +56,6 @@ class Gradient:
         if pos >= last_pos:
             return f"#{last_color.red:02x}{last_color.green:02x}{last_color.blue:02x}"
 
-        # Find containing segment and linearly interpolate
         for (c1, p1), (c2, p2) in itertools.pairwise(stops):
             if p1 <= pos <= p2:
                 t = 0.0 if p2 == p1 else (pos - p1) / (p2 - p1)
@@ -97,45 +64,24 @@ class Gradient:
                 b = int(round(c1.blue + (c2.blue - c1.blue) * t))  # noqa: RUF046
                 return f"#{r:02x}{g:02x}{b:02x}"
 
-        # Fallback
         return "#000000"
 
 
 def hsv_to_rgb(hue: NDArray, saturation: float, value: float) -> NDArray:
-    """
-    Converts an array of Hues using provided saturation and value properties to an RGB array.
+    """Convert hues and saturation/value in 0..1 to RGB values in 0..255."""
 
-    Args:
-        hue (numpy.ndarray): Array of hue values (0 to 1).
-        saturation (float between 0 and 1): The saturation ("brightness") of the color.
-        value (float between 0 and 1): The value ("colorfulness") of the color.
-
-    Returns:
-        numpy.ndarray: An array of RGB values where each RGB value is in the range
-                       0 to 255.
-
-    """
-
-    # The hue value is scaled by 6 to map it to one of the six sections of the
-    # RGB color wheel.
     hue_i = hue * 6
 
-    # The integer part of h_i determines the section of the color wheel the hue
-    # belongs to.
     i = np.floor(hue_i).astype(int)
 
-    # The fractional part of h_i.
     f = hue_i - i
 
-    # Intermediate values for the RGB conversion process.
     p = value * (1 - saturation)
     q = value * (1 - saturation * f)
     t = value * (1 - saturation * (1 - f))
 
-    # Ensure that i values are within the range [0, 5].
     i = i % 6
 
-    # Preparing an array for RGB values.
     rgb = np.empty((hue.shape[0], 3))
 
     # Select the same sector values without broadcasting six alternatives per
@@ -151,15 +97,13 @@ def hsv_to_rgb(hue: NDArray, saturation: float, value: float) -> NDArray:
         (i == 3) | (i == 4), value, np.where(i == 5, q, np.where(i == 2, t, p))
     )
 
-    # Scale the RGB values to the 0-255 range
     rgb *= 255
     return rgb
 
 
 def hsv_to_rgb_vect(h, s, v, out=None):
-    """
-    h, s, v: float32 arrays (N,) in [0,1]
-    Returns float32 RGB in [0,255]. If `out` (N,3) float32 is provided, writes in-place.
+    """h, s, v: float32 arrays (N,) in [0,1] Returns float32 RGB in [0,255]. If `out`
+    (N,3) float32 is provided, writes in-place.
     """
     h = np.asarray(h, dtype=np.float32)
     s = np.asarray(s, dtype=np.float32)
@@ -211,9 +155,8 @@ def hsv_to_rgb_vect(h, s, v, out=None):
 
 
 def rgb_to_hsv_vect(rgb, out=None):
-    """
-    rgb: (N,3) or (3,) uint8/float; returns float32 HSV in [0,1].
-    If `out` (N,3) float32 is provided, writes in-place.
+    """rgb: (N,3) or (3,) uint8/float; returns float32 HSV in [0,1]. If `out` (N,3)
+    float32 is provided, writes in-place.
     """
     arr = np.asarray(rgb, dtype=np.float32)
     scalar = arr.ndim == 1
@@ -254,20 +197,7 @@ def rgb_to_hsv_vect(rgb, out=None):
 
 
 def parse_color(color: str | list[int] | tuple[int, ...]) -> RGB:
-    """
-    Parses a color value and returns an RGB object.
-
-    Args:
-        color (str, list, tuple): The color value to be parsed. It can be a string representing a color name,
-                                 a list/tuple representing RGB values, or a string representing a HEX color code.
-
-    Returns:
-        RGB: An RGB object representing the parsed color.
-
-    Raises:
-        ValueError: If the color value is invalid or cannot be parsed.
-
-    """
+    """Parses a color value and returns an RGB object."""
     # A list or tuple is [r, g, b] (alpha removed): refuse a channel that is
     # not an int in 0..255 rather than format it into a malformed hex.
     if isinstance(color, (list, tuple)):
@@ -276,23 +206,17 @@ def parse_color(color: str | list[int] | tuple[int, ...]) -> RGB:
             raise ValueError(msg)
         return RGB(*color)
     try:
-        # Otherwise, it needs to be a string to continue
         if not isinstance(color, str):
             raise ValueError  # noqa: TRY004
-        # Try to find the color in the pre-defined dict
         if color in LEDFX_COLORS:
             color = LEDFX_COLORS[color]
-        # Try to parse it as a HEX (with or without alpha)
         if color.startswith("#"):
             color = color.strip("#")
-            # return RGB(*int(color, 16).to_bytes(len(color) // 2, "big"))
             return RGB(*int(color, 16).to_bytes(3, "big"))
-        # Failing that, try to parse it using ImageColor
         return RGB(*ImageColor.getrgb(color))
     # OverflowError: a hex value too long for three bytes (#1000000).
     except (ValueError, AssertionError, OverflowError):
         msg = f"Invalid color: {color}"
-        # _LOGGER.error(msg)
         raise ValueError(msg)
 
 
@@ -355,69 +279,44 @@ def coerce_color(value: object) -> str:
 
 
 def get_color_at_position(gradient_like, position: float) -> str:
-    """
-    Accepts a Gradient instance, an inline gradient string, or a simple color
+    """Accepts a Gradient instance, an inline gradient string, or a simple color
     string and returns a hex color sampled at `position` (0.0..1.0).
     """
-    # If caller passed a Gradient instance, use it directly
     if isinstance(gradient_like, Gradient):
         return gradient_like.sample(position)
 
-    # If it is a simple RGB value returned by parse_gradient, handle
     try:
         parsed = parse_gradient(gradient_like)
     except Exception:  # noqa: BLE001
-        # If parse fails, assume it's a color string and validate
         return coerce_color(gradient_like)
 
     if isinstance(parsed, RGB):
         return "#{:02x}{:02x}{:02x}".format(*parsed)
 
-    # Otherwise parsed is a Gradient
     return parsed.sample(position)
 
 
 def validate_gradient(gradient: str) -> str:
-    """
-    Validates the given gradient string.
-
-    Args:
-        gradient (str): The gradient string to be validated.
-
-    Returns:
-        str: The validated gradient string.
-    """
+    """Validates the given gradient string."""
     parse_gradient(gradient)
     return gradient
 
 
 def resolve_gradient(value: str, gradients_collection) -> tuple[str, Gradient | None]:
-    """Resolve a gradient input into a config string and an optional parsed Gradient.
-
-    Args:
-        value: user input (preset name or inline gradient string)
-        gradients_collection: collection object exposing get_all() and __getitem__()
-
-    Returns:
-        (config_string, parsed_gradient_or_None)
-
-    Raises:
-        ValueError: if the inline gradient is invalid.
+    """Return (config_string, parsed_gradient_or_None); reject invalid inline
+    gradients.
     """
     trimmed = value.strip()
 
-    # prefer user gradients over builtins for the stored config string
     defaults, user_vals = gradients_collection.get_all()
     raw_gradient = user_vals.get(trimmed) or defaults.get(trimmed)
 
     if raw_gradient:
         config_string = raw_gradient
     else:
-        # validate inline gradient string, will raise if invalid
         validate_gradient(trimmed)
         config_string = trimmed
 
-    # Resolve parsed gradient for sampling: prefer collection lookup
     parsed = None
     try:
         parsed = gradients_collection[trimmed]
@@ -431,9 +330,6 @@ def resolve_gradient(value: str, gradients_collection) -> tuple[str, Gradient | 
     return config_string, parsed
 
 
-# Color group definitions for applying global color settings to effects.
-# ``value`` is the normalised position on the gradient (0.0–1.0) used for
-# sampling, or ``None`` when sampling is not applicable.
 COLOR_GROUPS = [
     {
         "value": 0.0,
@@ -487,20 +383,7 @@ def build_gradient_config(
     gradients_collection,
     skip_keys: set | None = None,
 ) -> dict:
-    """Resolve a gradient and sample color groups into a config update dict.
-
-    Args:
-        gradient_input: gradient preset name or inline gradient string.
-        gradients_collection: collection exposing get_all() and __getitem__().
-        skip_keys: optional set of config keys to leave untouched
-            (e.g. keys the caller explicitly provided).
-
-    Returns:
-        A dict with ``"gradient"`` and any sampled color-group keys.
-
-    Raises:
-        ValueError: if the gradient cannot be resolved.
-    """
+    """Resolve gradient/color groups into config while preserving explicit skip_keys."""
     config_val, parsed_gradient = resolve_gradient(gradient_input, gradients_collection)
     config_updates: dict = {"gradient": config_val}
 

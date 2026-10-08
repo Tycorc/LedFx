@@ -22,18 +22,8 @@ TEST_CONFIG_DIR = os.environ.get("LEDFX_TEST_CONFIG_DIR") or os.path.join(
 
 @dataclass
 class APITestCase:
-    """
-    Represents a test case for the test runner.
-
-    Attributes:
-        execution_order (int): The order in which the test case should be executed. This order is within the test type/grouping, not the overall order of the tests.
-        method (str): The HTTP method to be used for the API request.
-        api_endpoint (str): The endpoint of the API to be tested, including the leading slash.
-        expected_return_code (int): The expected return code of the API response.
-        payload_to_send (Dict[str, Any], optional): The payload to be sent with the API request.
-        expected_response_keys (List[str], optional): The expected keys in the API response payload. You don't need to specify the entire payload, just the keys you want to check.
-        expected_payload_values (List[Dict[str, Any]], optional): The expected values in the API response payload. You don't need to specify the entire payload, just the key:values you want to check.
-        sleep_after_test (float, optional): The number of seconds to sleep after the test is complete. Defaults to 0.0. This is useful for tests that require a delay before the next test can be run.
+    """API assertion data; response keys/values may be subsets and order is per
+    group.
     """
 
     execution_order: int
@@ -56,15 +46,7 @@ class HTTPSession:
             ["HEAD", "TRACE", "GET", "PUT", "POST", "OPTIONS", "DELETE"]
         ),
     ):
-        """
-        Initialize the RetrySession object.
-
-        Args:
-            retries (int): The maximum number of retries for a request. Default is 5.
-            backoff_factor (float): The backoff factor between retries. Default is 0.25.
-            status_forcelist (tuple): The HTTP status codes that trigger a retry. Default is (500, 502, 504).
-            allowed_methods (frozenset): The set of allowed HTTP methods. Default is {"HEAD", "TRACE", "GET", "PUT", "POST", "OPTIONS", "DELETE"}.
-        """
+        """Initialize the RetrySession object."""
         self.retries = retries
         self.backoff_factor = backoff_factor
         self.status_forcelist = status_forcelist
@@ -72,11 +54,8 @@ class HTTPSession:
         self.session = self.requests_retry_session()
 
     def requests_retry_session(self):
-        """
-        Creates a session object with retry functionality for making HTTP requests.
-
-        Returns:
-            requests.Session: A session object with retry functionality.
+        """Creates a session object with retry functionality for making HTTP
+        requests.
         """
         session = requests.Session()
         retry = Retry(
@@ -95,20 +74,8 @@ class HTTPSession:
         return session
 
     def send_test_api_request(self, url, method, payload: str | dict | None = None):
-        """
-        Sends a test API request to the specified URL using the specified HTTP method.
-
-        Args:
-            url (str): The URL to send the request to.
-            method (str): The HTTP method to use for the request (GET, POST, PUT, DELETE).
-            payload (Optional[Union[str, dict]], optional): The payload to include in the request. Defaults to None.
-
-        Returns:
-            requests.Response: The response object containing the server's response to the request.
-
-        Raises:
-            ValueError: If an invalid HTTP method is provided.
-
+        """Sends a test API request to the specified URL using the specified HTTP
+        method.
         """
         headers = {"Content-Type": "application/json"}
         try:
@@ -130,12 +97,8 @@ class HTTPSession:
 class SystemInfo:
     @staticmethod
     def calc_available_fps():
-        """
-        Calculate the available frames per second (fps) based on the system's clock resolution.
-        Note: This comes from the ledfx/utils.py file
-
-        Returns:
-            dict: A dictionary where the keys represent the fps and the values represent the corresponding tick value.
+        """Calculate the available frames per second (fps) based on the system's
+        clock resolution. Note: This comes from the ledfx/utils.py file
         """
         if (sys.version_info[0] == 3 and sys.version_info[1] >= 11) or sys.version_info[  # noqa: YTT201, YTT203
             0

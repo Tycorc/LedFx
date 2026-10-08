@@ -13,11 +13,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class Waterfall(Twod, GradientEffect):
-    """
-    A 2D waterfall effect for LED matrices. This effect creates a scrolling
-    waterfall-like visualization based on audio data, with configurable
-    frequency bands, scrolling speed, and gradient colors.
-    """
+    """A 2D waterfall effect for LED matrices."""
 
     NAME = "Waterfall"
     CATEGORY = "Matrix"
@@ -52,34 +48,18 @@ class Waterfall(Twod, GradientEffect):
     config = TypedConfig(Config)
 
     def __init__(self, ledfx, config):
-        """
-        Initialize the Waterfall effect.
-
-        Args:
-            ledfx: The LedFx instance.
-            config: Configuration dictionary for the effect.
-        """
+        """Initialize the Waterfall effect."""
         super().__init__(ledfx, config)
 
     def on_activate(self, pixel_count):
-        """
-        Called when the effect is activated. Initializes variables.
-
-        Args:
-            pixel_count: The number of pixels in the matrix.
-        """
+        """Called when the effect is activated. Initializes variables."""
         self.r = np.zeros(pixel_count)
         self.o_width = 0
         self.o_height = 0
         self.history = None
 
     def config_updated(self, config):
-        """
-        Called when the effect configuration is updated.
-
-        Args:
-            config: The updated configuration dictionary.
-        """
+        """Called when the effect configuration is updated."""
         super().config_updated(config)
         self.bands = self.config.bands
         self.center = self.config.center
@@ -87,13 +67,10 @@ class Waterfall(Twod, GradientEffect):
         self.max = self.config.max_vs_mean
         self.drop_secs = self.config.drop_secs
         self.fade_out = self.config.fade_out
-        # we are going to do our own special thing with background color so disable default behavior
         self.bg_color_use = False
 
     def do_once(self):
-        """
-        Perform one-time setup tasks that depend on the pixel count.
-        """
+        """Perform one-time setup tasks that depend on the pixel count."""
         super().do_once()
         self.bands = min(self.bands, self.pixel_count)
         self.bandsx = []
@@ -101,7 +78,6 @@ class Waterfall(Twod, GradientEffect):
             start = int((self.r_width / float(self.bands)) * i)
             end = max(start, int(((self.r_width / float(self.bands)) * (i + 1)) - 1))
             self.bandsx.append([start, end])
-        # protect from 0 half_height and divide by zero risk
         self.half_height = max(1, int(self.r_height // 2))
         self.half_odd = bool(self.r_height % 2)
 
@@ -122,11 +98,9 @@ class Waterfall(Twod, GradientEffect):
             self.drop_tick = self.drop_tick * 2
         self.drop_remainder = 0.0
 
-        # generate a grey scale fade mask based on fade_out
         self.fade_mask = None
         self.black_bg = None
         if self.fade_out > 0.0:
-            # Create fade mask - fades linearly in scroll direction
             self.fade_mask = Image.new("L", (self.r_width, self.r_height))
             mask_draw = ImageDraw.Draw(self.fade_mask)
 
@@ -150,19 +124,12 @@ class Waterfall(Twod, GradientEffect):
             )
 
     def audio_data_updated(self, data):
-        """
-        Update the audio data for the effect.
-
-        Args:
-            data: The audio data to process.
-        """
+        """Update the audio data for the effect."""
         self.r = self.melbank(filtered=True, size=self.pixel_count)
         np.clip(self.r, 0, 1, out=self.r)
 
     def prep_frame_vars(self):
-        """
-        Prepare variables for rendering the current frame.
-        """
+        """Prepare variables for rendering the current frame."""
         r_split = np.array_split(self.r, self.bands)
         if self.max:
             self.volumes = np.array([split.max() for split in r_split])
@@ -174,12 +141,9 @@ class Waterfall(Twod, GradientEffect):
         )
 
     def scroll_history_one_row(self):
-        """
-        Scroll the history image down by one row.
-        """
+        """Scroll the history image down by one row."""
         w, h = self.history.size
 
-        # if there is no space to scroll just return
         if h < 2:
             return
 
@@ -187,19 +151,15 @@ class Waterfall(Twod, GradientEffect):
         self.history.paste(region, (0, 1))
 
     def scroll_center_history_one_row(self):
-        """
-        Scroll the history image from the center by one row.
-        """
+        """Scroll the history image from the center by one row."""
         w, h = self.history.size
 
-        # if there is no space to scroll just return
         if (self.half_odd and h < 3) or (not self.half_odd and h < 4):
             return
 
         region = self.history.crop((0, self.half_height, w, h - 1))
         self.history.paste(region, (0, self.half_height + 1))
 
-        # top half depend on odd/even height
         if self.half_odd:
             region = self.history.crop((0, 1, w, self.half_height + 1))
         else:
@@ -207,13 +167,10 @@ class Waterfall(Twod, GradientEffect):
         self.history.paste(region, (0, 0))
 
     def process_history(self):
-        """
-        Process the history image by scrolling it based on elapsed time.
-        """
+        """Process the history image by scrolling it based on elapsed time."""
         total_time = self.passed + self.drop_remainder
         ticks, self.drop_remainder = divmod(total_time, self.drop_tick)
 
-        # _LOGGER.info("Waterfall dropping %s ticks", ticks)
         for _ in range(int(ticks)):
             if self.center:
                 self.scroll_center_history_one_row()
@@ -221,9 +178,7 @@ class Waterfall(Twod, GradientEffect):
                 self.scroll_history_one_row()
 
     def draw_normal(self):
-        """
-        Draw the current frame onto the history image.
-        """
+        """Draw the current frame onto the history image."""
         for i in range(self.bands):
             band_start, band_end = self.bandsx[i]
 
@@ -255,9 +210,7 @@ class Waterfall(Twod, GradientEffect):
         self.matrix.paste(self.history)
 
     def draw(self):
-        """
-        Render the current frame of the effect.
-        """
+        """Render the current frame of the effect."""
 
         if self.test:
             self.draw_test(self.m_draw)
@@ -268,7 +221,6 @@ class Waterfall(Twod, GradientEffect):
 
         self.draw_normal()
 
-        # Apply fade out effect if enabled
         if self.fade_out > 0.0:
             self.matrix = Image.composite(
                 self.matrix, self.waterfall_background, self.fade_mask

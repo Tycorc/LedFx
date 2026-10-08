@@ -4,64 +4,43 @@ from typing import ClassVar
 
 
 class SocketSingleton:
-    """_summary_
-
-    Returns:
-        _type_: _description_
-    """
+    """Reference-counted UDP sockets shared by receive port."""
 
     _instances: ClassVar[dict[int, dict[str, "SocketSingleton | int"]]] = {}
     _lock = Lock()
 
     def __new__(cls, recv_port):
-        """creates a new singleton socket instance with a bind again the specified port
-        Checks if an instance already exists for the specified port and returns it if it does.
-
-        Args:
-            recv_port: recieve port number
-
-        Returns: socket instance new or existing
-        """
-        # Ensure that only one instance is created for each port
+        """Reuse the socket for recv_port, creating and binding it when absent."""
         with cls._lock:
             if recv_port not in cls._instances:
-                # Create the new instance if it doesn't exist
                 instance = super().__new__(cls)
                 cls._instances[recv_port] = {
                     "instance": instance,
                     "ref_count": 0,
                 }
-            # Return the existing instance for the specified port
             return cls._instances[recv_port]["instance"]
 
     def __init__(self, recv_port):
-        """Creates and adds reference count
-
-        Args:
-            recv_port: port to bind to
-        """
+        """Acquire one reference to the shared socket."""
         self.recv_port = recv_port
         self._create_socket()
 
-        # Increment reference count
         SocketSingleton._instances[self.recv_port]["ref_count"] += 1
 
     def _create_socket(self):
         """Creates a new socket and binds it to the specified port."""
         if not hasattr(self, "udp_server"):
             self.udp_server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            # disable CodeQL warning. We will filter against active instances on receipt of packets
-            # Active instance endpoints can be added at any time post bind.
-            # nosem: py/bind-socket-all-network-interfaces
             self.udp_server.bind(("", self.recv_port))
 
     def close(self):
-        """Decrements the reference count and closes the socket if no more references exist."""
+        """Decrements the reference count and closes the socket if no more references
+        exist.
+        """
         with SocketSingleton._lock:
             if self.recv_port in SocketSingleton._instances:
                 SocketSingleton._instances[self.recv_port]["ref_count"] -= 1
                 if SocketSingleton._instances[self.recv_port]["ref_count"] <= 0:
-                    # Close the socket and remove the instance
                     self.udp_server.close()
                     del SocketSingleton._instances[self.recv_port]
 

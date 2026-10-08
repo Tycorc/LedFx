@@ -1,7 +1,4 @@
 import asyncio
-
-"""API endpoint for generating asset thumbnails."""
-
 import io
 import logging
 
@@ -15,28 +12,13 @@ from ledfx.utils import get_image_cache
 
 _LOGGER = logging.getLogger(__name__)
 
-# Default and limits for thumbnail size
 DEFAULT_THUMBNAIL_SIZE = 128
 MIN_THUMBNAIL_SIZE = 16
 MAX_THUMBNAIL_SIZE = 512
 
 
 def _calculate_thumbnail_dimensions(width, height, size, dimension):
-    """
-    Calculate thumbnail dimensions based on the requested size and dimension mode.
-
-    Args:
-        width: Original image width in pixels
-        height: Original image height in pixels
-        size: Target size in pixels
-        dimension: Dimension mode - "max", "width", or "height"
-
-    Returns:
-        tuple: (new_width, new_height) for the thumbnail
-
-    Raises:
-        ValueError: If width or height are not positive non-zero integers
-    """
+    """Calculate thumbnail dimensions based on the requested size and dimension mode."""
     if width <= 0 or height <= 0:
         raise ValueError(
             f"Width and height must be positive non-zero integers, got width={width}, height={height}"
@@ -49,7 +31,6 @@ def _calculate_thumbnail_dimensions(width, height, size, dimension):
         new_height = size
         new_width = max(1, int(width * (size / height)))
     else:  # dimension == "max"
-        # Apply size to longest axis, maintaining aspect ratio
         if width > height:
             new_width = size
             new_height = max(1, int(height * (size / width)))
@@ -61,55 +42,12 @@ def _calculate_thumbnail_dimensions(width, height, size, dimension):
 
 
 class AssetsThumbnailEndpoint(RestEndpoint):
-    """
-    REST API endpoint for generating asset thumbnails on-demand.
-
-    Generates thumbnails with configurable size, maintaining aspect ratio.
-    - Static images: PNG format
-    - Animated images: WebP format (preserves animation)
-
-    Supports user-uploaded assets, built-in assets, and remote URLs:
-    - User assets: "icons/led.png" (no prefix)
-    - Built-in assets: "builtin://skull.gif" (builtin:// prefix)
-    - Remote URLs: "https://example.com/image.gif" (automatically fetched and cached)
-
-    Supports both GET and POST methods:
-    - GET: /api/assets/thumbnail?path=icons/led.png&size=128 (browser-friendly)
-    - POST: JSON body with parameters (programmatic use)
-
-    Remote URLs are validated (SSRF protection, size limits, content validation),
-    fetched if not cached, and cached for future requests.
-    """
+    """REST API endpoint for generating asset thumbnails on-demand."""
 
     ENDPOINT_PATH = "/api/assets/thumbnail"
 
     async def get(self, request: web.Request) -> web.Response:
-        """
-        Generate and return a thumbnail of an asset via GET request.
-
-        Query Parameters:
-            path (required): Asset identifier
-                - User assets: "icons/led.png" (no prefix)
-                - Built-in assets: "builtin://skull.gif" (builtin:// prefix)
-                - Cached URLs: "https://example.com/image.gif" (http:// or https://)
-            size (optional): Dimension size in pixels (default 128, range 16-512)
-            dimension (optional): Which dimension to apply size to (default "max")
-                - "max": Apply to longest axis (default)
-                - "width": Apply to width, scale height proportionally
-                - "height": Apply to height, scale width proportionally
-            animated (optional): For multi-frame images, preserve animation (default true)
-                - "true": Return animated WebP for animated images
-                - "false": Return static PNG of first frame
-            force_refresh (optional): Force regeneration bypassing cache (default false)
-                - "true": Clear cache and regenerate thumbnail
-                - "false": Use cached thumbnail if available
-
-        Returns:
-            PNG or WebP image data with appropriate Content-Type header.
-            - Static images: image/png
-            - Animated images (when animated=true): image/webp
-            - Animated images (when animated=false): image/png (first frame only)
-        """
+        """Generate and return a thumbnail of an asset via GET request."""
         asset_path = request.query.get("path")
 
         if not asset_path:
@@ -118,7 +56,6 @@ class AssetsThumbnailEndpoint(RestEndpoint):
                 type="error",
             )
 
-        # Get and validate size parameter
         size = request.query.get("size", str(DEFAULT_THUMBNAIL_SIZE))
         try:
             size = int(size)
@@ -133,7 +70,6 @@ class AssetsThumbnailEndpoint(RestEndpoint):
                 type="error",
             )
 
-        # Get and validate dimension parameter
         dimension = request.query.get("dimension", "max")
         if dimension not in ("max", "width", "height"):
             return await self.invalid_request(
@@ -141,10 +77,8 @@ class AssetsThumbnailEndpoint(RestEndpoint):
                 type="error",
             )
 
-        # Get and validate animated parameter (query params are strings - accept "true"/"false")
         animated = request.query.get("animated", "true").lower() == "true"
 
-        # Get and validate force_refresh parameter (query params are strings - accept "true"/"false")
         force_refresh = request.query.get("force_refresh", "false").lower() == "true"
 
         return await self._generate_thumbnail(
@@ -152,32 +86,7 @@ class AssetsThumbnailEndpoint(RestEndpoint):
         )
 
     async def post(self, request: web.Request) -> web.Response:
-        """
-        Generate and return a thumbnail of an asset.
-
-        Request Body (JSON):
-            path (required): Asset identifier
-                - User assets: "icons/led.png" (no prefix)
-                - Built-in assets: "builtin://skull.gif" (builtin:// prefix)
-                - Cached URLs: "https://example.com/image.gif" (http:// or https://)
-            size (optional): Dimension size in pixels (default 128, range 16-512)
-            dimension (optional): Which dimension to apply size to (default "max")
-                - "max": Apply to longest axis (default)
-                - "width": Apply to width, scale height proportionally
-                - "height": Apply to height, scale width proportionally
-            animated (optional): For multi-frame images, preserve animation (default true)
-                - true: Return animated WebP for animated images
-                - false: Return static PNG of first frame
-            force_refresh (optional): Force regeneration bypassing cache (default false)
-                - true: Clear cache and regenerate thumbnail
-                - false: Use cached thumbnail if available
-
-        Returns:
-            PNG or WebP image data with appropriate Content-Type header.
-            - Static images: image/png
-            - Animated images (when animated=true): image/webp
-            - Animated images (when animated=false): image/png (first frame only)
-        """
+        """Generate and return a thumbnail of an asset."""
         try:
             data = await request.json()
         except Exception:  # noqa: BLE001
@@ -190,7 +99,6 @@ class AssetsThumbnailEndpoint(RestEndpoint):
                 type="error",
             )
 
-        # Get and validate size parameter
         size = data.get("size", DEFAULT_THUMBNAIL_SIZE)
         try:
             size = int(size)
@@ -205,7 +113,6 @@ class AssetsThumbnailEndpoint(RestEndpoint):
                 type="error",
             )
 
-        # Get and validate dimension parameter
         dimension = data.get("dimension", "max")
         if dimension not in ("max", "width", "height"):
             return await self.invalid_request(
@@ -213,7 +120,6 @@ class AssetsThumbnailEndpoint(RestEndpoint):
                 type="error",
             )
 
-        # Get and validate animated parameter
         animated = data.get("animated", True)
         if not isinstance(animated, bool):
             return await self.invalid_request(
@@ -221,7 +127,6 @@ class AssetsThumbnailEndpoint(RestEndpoint):
                 type="error",
             )
 
-        # Get and validate force_refresh parameter
         force_refresh = data.get("force_refresh", False)
         if not isinstance(force_refresh, bool):
             return await self.invalid_request(
@@ -242,26 +147,9 @@ class AssetsThumbnailEndpoint(RestEndpoint):
         animated: bool,
         force_refresh: bool,
     ) -> web.Response:
-        """
-        Internal helper to generate a thumbnail for an asset.
-
-        Args:
-            request: The aiohttp request object
-            asset_path: Asset identifier (may include builtin:// prefix or HTTP/HTTPS URL)
-            size: Thumbnail size in pixels (16-512)
-            dimension: Which dimension to apply size to ("max", "width", or "height")
-            animated: Whether to preserve animation for multi-frame images
-            force_refresh: Whether to bypass cache and regenerate
-
-        Returns:
-            Binary image response (PNG or WebP) or JSON error response
-        """
-        # Check if path is a cached remote URL
+        """Internal helper to generate a thumbnail for an asset."""
         is_cached_url = asset_path.startswith(("http://", "https://"))
 
-        # Create cache key with parameters
-        # Use "asset://" prefix for local assets to distinguish from URL-based cache
-        # For cached URLs, use the URL directly as the cache key
         if is_cached_url:
             cache_url = asset_path
         else:
@@ -273,17 +161,14 @@ class AssetsThumbnailEndpoint(RestEndpoint):
             "animated": animated,
         }
 
-        # Check cache first (unless force_refresh is requested)
         cache = get_image_cache()
         if cache and not force_refresh:
             cached_path = cache.get(cache_url, cache_params)
             if cached_path:
                 try:
-                    # Return cached thumbnail
                     with open(cached_path, "rb") as f:  # noqa: ASYNC230
                         cached_data = f.read()
 
-                    # Determine content type from extension
                     content_type = (
                         "image/webp" if cached_path.endswith(".webp") else "image/png"
                     )
@@ -304,15 +189,12 @@ class AssetsThumbnailEndpoint(RestEndpoint):
                     _LOGGER.warning(
                         "Failed to read cached thumbnail, regenerating: %s", e
                     )
-                    # Delete corrupt cache entry and fall through to regenerate
                     cache.delete(cache_url, cache_params)
 
         try:
-            # For URLs, fetch and cache if needed (with validation)
             if is_cached_url:
                 from ledfx.utils import open_image
 
-                # open_image handles URL validation, download, and caching
                 try:
                     image = await asyncio.to_thread(
                         open_image, asset_path, config_dir=self._ledfx.config_dir
@@ -323,7 +205,6 @@ class AssetsThumbnailEndpoint(RestEndpoint):
                             type="error",
                         )
 
-                    # Get cached path after successful download
                     if not cache:
                         return await self.invalid_request(
                             message="Image cache not initialized",
@@ -343,7 +224,6 @@ class AssetsThumbnailEndpoint(RestEndpoint):
                         type="error",
                     )
             else:
-                # Get the asset path (checks both user assets and built-in assets)
                 exists, abs_path, error = assets.get_asset_or_builtin_path(
                     self._ledfx.config_dir, asset_path
                 )
@@ -354,22 +234,17 @@ class AssetsThumbnailEndpoint(RestEndpoint):
                         type="error",
                     )
 
-            # Open and generate thumbnail
             try:
                 with Image.open(abs_path) as img:
-                    # Check if image is animated
                     is_animated_image = getattr(img, "is_animated", False)
                     n_frames = getattr(img, "n_frames", 1)
 
                     if animated and is_animated_image and n_frames > 1:
-                        # Assets on disk may predate the upload-time frame
-                        # caps, so check before decoding every frame.
                         if not validate_pil_image(img):
                             return await self.invalid_request(
                                 message="Animation exceeds frame or size limits",
                                 type="error",
                             )
-                        # Process animated image - create WebP thumbnail
                         frames = []
                         durations = []
 
@@ -377,29 +252,23 @@ class AssetsThumbnailEndpoint(RestEndpoint):
                             img.seek(frame_idx)
                             frame = img.copy()
 
-                            # Convert frame to RGBA for consistency
-                            # This ensures palette/grayscale frames are handled properly
                             if frame.mode != "RGBA":
                                 frame = frame.convert("RGBA")
 
-                            # Calculate dimensions
                             width, height = frame.size
                             new_width, new_height = _calculate_thumbnail_dimensions(
                                 width, height, size, dimension
                             )
 
-                            # Resize frame
                             resized_frame = frame.resize(
                                 (new_width, new_height),
                                 Image.Resampling.LANCZOS,
                             )
                             frames.append(resized_frame)
 
-                            # Get frame duration (default 100ms if not available)
                             duration = img.info.get("duration", 100)
                             durations.append(duration)
 
-                        # Save as animated WebP
                         buffer = io.BytesIO()
                         frames[0].save(
                             buffer,
@@ -414,11 +283,9 @@ class AssetsThumbnailEndpoint(RestEndpoint):
 
                         thumbnail_data = buffer.read()
 
-                        # Clear existing cache entry if force_refresh was requested
                         if cache and force_refresh:
                             cache.delete(cache_url, cache_params)
 
-                        # Cache the generated thumbnail
                         if cache:
                             try:
                                 cache.put(
@@ -439,38 +306,30 @@ class AssetsThumbnailEndpoint(RestEndpoint):
                             headers={"Content-Type": "image/webp"},
                         )
                     else:
-                        # Process static image - create PNG thumbnail
-                        # For animated images with animated=false, use first frame
                         if is_animated_image and n_frames > 1:
                             img.seek(0)  # Get first frame
 
-                        # Convert to RGB if necessary (handles RGBA, P, etc.)
                         if img.mode not in ("RGB", "L"):
                             img = img.convert("RGB")
 
-                        # Calculate thumbnail dimensions based on dimension parameter
                         width, height = img.size
                         new_width, new_height = _calculate_thumbnail_dimensions(
                             width, height, size, dimension
                         )
 
-                        # Resize image
                         img = img.resize(
                             (new_width, new_height), Image.Resampling.LANCZOS
                         )
 
-                        # Save to bytes buffer as PNG
                         buffer = io.BytesIO()
                         img.save(buffer, format="PNG", optimize=True)
                         buffer.seek(0)
 
                         thumbnail_data = buffer.read()
 
-                        # Clear existing cache entry if force_refresh was requested
                         if cache and force_refresh:
                             cache.delete(cache_url, cache_params)
 
-                        # Cache the generated thumbnail
                         if cache:
                             try:
                                 cache.put(

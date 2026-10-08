@@ -16,29 +16,13 @@ class PresetsEndpoint(RestEndpoint):
     ENDPOINT_PATH = "/api/effects/{effect_id}/presets"
 
     async def invalid_effect_id(self, effect_id):
-        """
-        Helper function to handle the case when an invalid effect ID is provided.
-
-        Args:
-            effect_id (str): The ID of the effect that does not exist.
-
-        Returns:
-            Response: The invalid request response indicating the error message.
-
-        """
+        """Helper function to handle the case when an invalid effect ID is provided."""
         error_message = f"Effect {effect_id} does not exist"
         _LOGGER.warning(error_message)
         return await self.invalid_request(error_message)
 
     async def get(self, effect_id) -> web.Response:
-        """Get all presets for an effect
-
-        Args:
-            effect_id (str): The ID of the effect.
-
-        Returns:
-            web.Response: The HTTP response containing the presets for the effect.
-        """
+        """Get all presets for an effect"""
 
         try:
             self._ledfx.effects.get_class(effect_id)
@@ -65,15 +49,7 @@ class PresetsEndpoint(RestEndpoint):
         return await self.bare_request_success(response)
 
     async def put(self, effect_id, request) -> web.Response:
-        """Rename a preset
-
-        Args:
-            effect_id (str): The ID of the effect.
-            request (web.Request): The request containing `preset_id`, `category`, and `name`.
-
-        Returns:
-            web.Response: The HTTP response object.
-        """
+        """Rename a preset"""
         try:
             data = await request.json()
         except JSONDecodeError:
@@ -122,15 +98,7 @@ class PresetsEndpoint(RestEndpoint):
         return await self.request_success()
 
     async def delete(self, effect_id, request) -> web.Response:
-        """Delete a preset.
-
-        Args:
-            effect_id (str): The ID of the effect.
-            request (web.Request): The request containing `preset_id` and `category`.
-
-        Returns:
-            web.Response: The HTTP response object.
-        """
+        """Delete a preset."""
         try:
             data = await request.json()
         except JSONDecodeError:

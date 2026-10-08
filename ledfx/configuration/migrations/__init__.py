@@ -1,9 +1,4 @@
-"""Ordered, pure config migrations.
-
-Each step maps the raw ``config.json`` dict of one schema version to the next.
-Steps never touch the registry, models or disk, so they can run on imports,
-at load time and in tests alike.
-"""
+"""Pure, ordered migrations from raw config dictionaries; no registry or disk access."""
 
 import copy
 from collections.abc import Callable
@@ -13,7 +8,6 @@ from ledfx.configuration.migrations.v2 import v1_to_v2
 
 Migration = Callable[[dict[str, object]], dict[str, object]]
 
-# (target schema_version, step). Append only; never edit a released step.
 MIGRATIONS: list[tuple[int, Migration]] = [
     (1, legacy_to_v1),
     (2, v1_to_v2),

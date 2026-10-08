@@ -15,21 +15,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class ZeroConfRunner:
-    """
-    Class responsible for handling zeroconf, WLED discovery and WLED device registration.
-
-    Attributes:
-        aiobrowser: The async service browser for zeroconf.
-        aiozc: The async zeroconf instance.
-        _ledfx: The ledfx instance.
-
-    Methods:
-        on_service_state_change: Callback function for service state change.
-        async_on_service_state_change: Asynchronous function for handling WLED service state change.
-        add_wled_device: Asynchronous function for adding discovered WLED devices to config.
-        discover_wled_devices: Asynchronous function for discovering WLED devices.
-        async_close: Asynchronous function for closing zeroconf listener.
-    """
+    """Manage zeroconf discovery and WLED registration."""
 
     def __init__(self, ledfx):
         self.aiobrowser = None
@@ -49,16 +35,7 @@ class ZeroConfRunner:
         name: str,
         state_change: ServiceStateChange,
     ):
-        """
-        Callback function for service state change.
-
-        Args:
-            zeroconf (Zeroconf): The zeroconf instance.
-            service_type (str): The service type.
-            name (str): The service name.
-            state_change (ServiceStateChange): The state change event.
-        """
-        # Schedule the coroutine to be run on the event loop
+        """Callback function for service state change."""
         async_fire_and_forget(
             self.async_on_service_state_change(
                 zeroconf=zeroconf,
@@ -76,15 +53,7 @@ class ZeroConfRunner:
         name: str,
         state_change: ServiceStateChange,
     ):
-        """
-        Asynchronous function for handling service state change.
-
-        Args:
-            zeroconf (Zeroconf): The zeroconf instance.
-            service_type (str): The service type.
-            name (str): The service name.
-            state_change (ServiceStateChange): The state change event.
-        """
+        """Asynchronous function for handling service state change."""
         _LOGGER.debug(
             "Service %s of type %s state changed: %s",
             name,
@@ -102,19 +71,8 @@ class ZeroConfRunner:
     async def add_wled_device(
         self, zeroconf: Zeroconf, service_type: str, name: str
     ) -> None:
-        """
-        Asynchronous function for feeding discovered WLED devices to add_new_device.
-
-        Duplicate detection is handled within add_new_device.
-
-        Args:
-            zeroconf (Zeroconf): The zeroconf instance.
-            service_type (str): The service type.
-            name (str): The service name.
-        """
+        """Forward discoveries to add_new_device, which handles duplicates."""
         info = AsyncServiceInfo(service_type, name)
-        # async_request returns False on timeout. An SRV record alone still sets
-        # info.server, and add_new_device resolves that hostname itself.
         await info.async_request(zeroconf, 3000)
         if info.server:
             hostname = str(info.server).rstrip(".")
@@ -124,7 +82,6 @@ class ZeroConfRunner:
             device_config = {"ip_address": hostname}
 
             def handle_exception(future):
-                # Ignore exceptions, these will be raised when a device is found that already exists
                 future.exception()
 
             async_fire_and_forget(
@@ -134,9 +91,7 @@ class ZeroConfRunner:
             )
 
     async def discover_wled_devices(self) -> None:
-        """
-        Asynchronous function for discovering WLED devices.
-        """
+        """Asynchronous function for discovering WLED devices."""
         previous = self.aiobrowser, self.aiozc
         self.aiozc = AsyncZeroconf()
         services = ["_wled._tcp.local."]
@@ -156,9 +111,7 @@ class ZeroConfRunner:
         await asyncio.shield(task)
 
     async def async_close(self) -> None:
-        """
-        Asynchronous function for closing zeroconf listener.
-        """
+        """Asynchronous function for closing zeroconf listener."""
         await self._close(self.aiobrowser, self.aiozc)
         if self._closing:
             await asyncio.gather(*self._closing, return_exceptions=True)

@@ -49,7 +49,6 @@ class Water(AudioReactiveEffect, HSVEffect):
 
     def __init__(self, ledfx, config):
         super().__init__(ledfx, config)
-        # Queue will contain tuples of (pixel location, water height value)
         self.drops_queue = queue.Queue()
         # Cache computed config values
         self._damp_factor = None
@@ -142,9 +141,6 @@ class Water(AudioReactiveEffect, HSVEffect):
         # Hues are a triangle of the raw values which makes for some nice effects.
         self.hsv_array[:, 0] = triangle(current_buf)
 
-        # Shift the values buffer up by the shift amount and then scale to fit.
-        # Values can still be out of bounds, so we clamp.
-        # Important: Keep unclipped version for saturation calculation
         np.add(current_buf, shift_v, out=self.hsv_array[:, 2])
         np.divide(self.hsv_array[:, 2], 1 + shift_v, out=self.hsv_array[:, 2])
 
@@ -179,10 +175,6 @@ class Water(AudioReactiveEffect, HSVEffect):
         src = 1 if buf_idx == 0 else 0
         dest = 0 if buf_idx == 0 else 1
 
-        # The 2D version of this algorithm uses the north and south neighbors.
-        # Since we don't have that here, I dropped in the value at the current
-        # position.  This slows down the waves somewhat and still looks nice.
-        # Vectorized implementation - MUCH faster than Python for loop
         buf[dest][1:-1] = (
             (buf[src][:-2] + buf[src][2:] + buf[src][1:-1] * 2) / 2
         ) - buf[dest][1:-1]

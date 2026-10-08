@@ -348,59 +348,6 @@ class TestContentTypeExtensionMapping:
 
 
 # Test Scenarios Documentation
-"""
-CACHE TEST SCENARIOS:
-
-BASIC OPERATIONS:
-1. Cache initialization with correct parameters
-2. Cache miss returns None
-3. Cache hit returns correct cached file
-4. Metadata tracked for all cached items
-
-ACCESS TRACKING:
-1. access_count increments on each get()
-2. last_accessed timestamp updates on each get()
-3. cached_at timestamp set on initial put()
-
-LRU EVICTION:
-1. Eviction when max_items exceeded (count limit)
-2. Eviction when max_size_bytes exceeded (size limit)
-3. Least recently accessed item evicted first
-4. Items with higher access_count retained longer
-
-DELETION:
-1. Delete specific URL removes from cache
-2. Delete nonexistent URL returns False
-3. Clear all removes all entries
-4. Metadata updated after deletion
-
-PERSISTENCE:
-1. Metadata saved to disk after changes
-2. Metadata loaded from disk on init
-3. Cached files survive restart
-4. Access tracking persists across restarts
-
-STATISTICS:
-1. get_stats() returns correct totals
-2. Entries sorted by access_count descending
-3. All entry fields included in stats
-
-HEADERS:
-1. ETag and Last-Modified stored
-2. Headers retrievable for cached URLs
-3. Headers None for uncached URLs
-
-EXTENSION MAPPING:
-1. Correct extension from content type
-2. Default fallback for unknown types
-3. Files saved with correct extension
-
-FALLBACK ON ERROR:
-1. Corrupted cached files trigger re-download (open_image)
-2. Corrupted cached files trigger re-download (open_gif)
-3. Invalid cached files are deleted from cache
-4. Fresh download succeeds after cache corruption
-"""
 
 
 class TestCacheFallbackOnError:

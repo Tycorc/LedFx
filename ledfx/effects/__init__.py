@@ -1,8 +1,6 @@
 import logging
 import threading
 import timeit
-
-# from ledfx.effects.audio import FREQUENCY_RANGES
 from functools import lru_cache
 from typing import TYPE_CHECKING, ClassVar
 
@@ -35,13 +33,9 @@ class DummyEffect:
         self.pixel_count = pixel_count
 
     def _render(self):
-        # we don't need a self.lock as we don't do anything in deactivate
-        # self.pixels will be valid while this instance is in scope
         self.render()
 
     def render(self):
-        # we need to clear this each render frame as transitions reuse
-        # active effect pixel space
         self.pixels = np.zeros((self.pixel_count, 3))
 
     def get_pixels(self):
@@ -60,17 +54,7 @@ class DummyEffect:
 
 
 def mix_colors(color_1: tuple, color_2: tuple, ratio: float) -> tuple:
-    """
-    Mixes two colors based on a given ratio.
-
-    Parameters:
-    color_1 (tuple): The first color represented as a tuple of RGB values.
-    color_2 (tuple): The second color represented as a tuple of RGB values.
-    ratio (float): The ratio of color_1 to color_2 in the final mixed color.
-
-    Returns:
-    tuple: The mixed color represented as a tuple of RGB values.
-    """
+    """Mixes two colors based on a given ratio."""
     if np.array_equal(color_2, []):
         return (
             color_1[0] * (1 - ratio) + 0,
@@ -86,42 +70,19 @@ def mix_colors(color_1: tuple, color_2: tuple, ratio: float) -> tuple:
 
 
 def fill_rainbow(pixels: NDArray, initial_hue: float, delta_hue: float) -> NDArray:
-    """
-    Fills the given pixels with a rainbow effect.
-
-    Args:
-        pixels (numpy.ndarray): Array of pixels to be filled with colors.
-        initial_hue (float): Initial hue value for the rainbow effect.
-        delta_hue (float): Difference in hue between each pixel.
-
-    Returns:
-        numpy.ndarray: Array of RGB values representing the rainbow effect.
-    """
+    """Fills the given pixels with a rainbow effect."""
     sat = 0.95
     val = 1.0
 
-    # Create an array of hue values starting from 'initial_hue' and increasing
-    # by 'delta_hue' for each pixel. The array length is initially set to be longer
-    # than the number of pixels.
     hues = np.arange(initial_hue, initial_hue + len(pixels) * delta_hue, delta_hue)
 
-    # ensure each pixel has a corresponding hue value.
     hues = hues[: len(pixels)]
 
     return hsv_to_rgb(hues, sat, val)
 
 
 def blur_pixels(pixels: NDArray, sigma: float) -> NDArray:
-    """
-    Applies a blur effect to the given pixels.
-
-    Args:
-        pixels (ndarray): The input pixel array.
-        sigma (float): The standard deviation of the Gaussian kernel.
-
-    Returns:
-        ndarray: The blurred pixel array.
-    """
+    """Applies a blur effect to the given pixels."""
     rgb_array = pixels.T
     rgb_array[0] = smooth(rgb_array[0], sigma)
     rgb_array[1] = smooth(rgb_array[1], sigma)
@@ -131,22 +92,8 @@ def blur_pixels(pixels: NDArray, sigma: float) -> NDArray:
 
 @lru_cache(maxsize=1024)
 def _gaussian_kernel1d(sigma: float, order: int, array_len: int) -> NDArray:
-    """
-    Produces a 1D Gaussian or Gaussian-derivative filter kernel as a numpy array.
+    """Produces a 1D Gaussian or Gaussian-derivative filter kernel as a numpy array."""
 
-    Args:
-        sigma (float): The standard deviation of the filter.
-        order (int): The derivative-order to use. 0 indicates a Gaussian function, 1 a 1st order derivative, etc.
-        radius (int): The kernel produced will be of length (2*radius+1)
-
-    Returns:
-        Array of length (2*radius+1) containing the filter kernel.
-    """
-
-    # Choose a radius for the filter kernel large enough to include all significant elements. Using
-    # a radius of 4 standard deviations (rounded to int) will only truncate tail values that are of
-    # the order of 1e-5 or smaller. For very small sigma values, just use a minimal radius.
-    # trapping very small values of sigma to arbitarily 0.00001 to preven div zero crash
     sigma = max(0.00001, sigma)
     radius = max(1, int(round(4.0 * sigma)))  # noqa: RUF046
     radius = min(int((array_len - 1) / 2), radius)
@@ -163,12 +110,9 @@ def _gaussian_kernel1d(sigma: float, order: int, array_len: int) -> NDArray:
     phi_x /= phi_x.sum()
 
     if order > 0:
-        # For Gaussian-derivative filters, the function must be derived one or more times.
         q = np.polynomial.Polynomial([1])
         p_deriv = p.deriv()
         for _ in range(order):
-            # f(x) = q(x) * phi(x) = q(x) * exp(p(x))
-            # f'(x) = (q'(x) + q(x) * p'(x)) * phi(x)
             q = q.deriv() + q * p_deriv
         phi_x *= q(x)
 
@@ -176,19 +120,7 @@ def _gaussian_kernel1d(sigma: float, order: int, array_len: int) -> NDArray:
 
 
 def fast_blur_pixels(pixels: NDArray, sigma: float) -> NDArray:
-    """
-    Applies a fast blur effect to the given pixels using a Gaussian kernel.
-
-    Args:
-        pixels (ndarray): The input array of pixels.
-        sigma (float): The standard deviation of the Gaussian kernel.
-
-    Returns:
-        ndarray: The blurred pixels array.
-
-    Raises:
-        ValueError: If the input array is empty.
-    """
+    """Applies a fast blur effect to the given pixels using a Gaussian kernel."""
     if len(pixels) == 0:
         raise ValueError("Cannot smooth an empty array")
     kernel = _gaussian_kernel1d(sigma, 0, len(pixels))
@@ -199,19 +131,7 @@ def fast_blur_pixels(pixels: NDArray, sigma: float) -> NDArray:
 
 
 def fast_blur_array(array: NDArray, sigma: float) -> NDArray:
-    """
-    Apply fast Gaussian blur to a 1-dimensional array.
-
-    Args:
-        array (numpy.ndarray): The input array to be blurred.
-        sigma (float): The standard deviation of the Gaussian kernel.
-
-    Returns:
-        numpy.ndarray: The blurred array.
-
-    Raises:
-        ValueError: If the input array is empty.
-    """
+    """Apply fast Gaussian blur to a 1-dimensional array."""
     if len(array) == 0:
         raise ValueError("Cannot smooth an empty array")
     kernel = _gaussian_kernel1d(sigma, 0, len(array))
@@ -219,35 +139,14 @@ def fast_blur_array(array: NDArray, sigma: float) -> NDArray:
 
 
 def smooth(x, sigma):
-    """
-    Smooths a 1D array via a Gaussian filter.
-
-    Args:
-        x (array of floats): The array to be smoothed.
-        sigma (float): The standard deviation of the smoothing filter to use.
-
-    Returns:
-        Array of same length as x.
-    """
+    """Smooths a 1D array via a Gaussian filter."""
 
     if len(x) == 0:
         raise ValueError("Cannot smooth an empty array")
 
-    # Choose a radius for the filter kernel large enough to include all significant elements. Using
-    # a radius of 4 standard deviations (rounded to int) will only truncate tail values that are of
-    # the order of 1e-5 or smaller. For very small sigma values, just use a minimal radius.
     kernel_radius = max(1, int(round(4.0 * sigma)))  # noqa: RUF046
     filter_kernel = _gaussian_kernel1d(sigma, 0, kernel_radius)
 
-    # The filter kernel will be applied by convolution in 'valid' mode, which includes only the
-    # parts of the convolution in which the two signals full overlap, i.e. where the shorter signal
-    # is entirely contained within the longer signal, producing an output signal of length equal to
-    # the difference in length between the two input signals, plus one. So the input signal must be
-    # extended by mirroring the ends (to give realistic values for the first and last pixels after
-    # smoothing) until len(x_mirrored) - len(w) + 1 = len(x). This requires adding (len(w)-1)/2
-    # values to each end of the input. If len(x) < (len(w)-1)/2, then the mirroring will need to be
-    # performed over multiple iterations, as the mirrors can only, at most, triple the length of x
-    # each time they are applied.
     extended_input_len = len(x) + len(filter_kernel) - 1
     x_mirrored = x
     while len(x_mirrored) < extended_input_len:
@@ -258,11 +157,6 @@ def smooth(x, sigma):
             x_mirrored[-1 : -(mirror_len + 1) : -1],
         ]
 
-    # Convolve the extended input copy with the filter kernel to apply the filter.
-    # Convolving in 'valid' mode clips includes only the parts of the convolution in which the two
-    # signals full overlap, i.e. the shorter signal is entirely contained within the longer signal.
-    # It produces an output of length equal to the difference in length between the two input
-    # signals, plus one. So this relies on the assumption that len(s) - len(w) + 1 >= len(x).
     y = np.convolve(x_mirrored, filter_kernel, mode="valid")
 
     assert len(y) == len(x)
@@ -272,23 +166,17 @@ def smooth(x, sigma):
 
 @BaseRegistry.no_registration
 class Effect(BaseRegistry):
-    """
-    Manages an effect
-    """
+    """Manages an effect"""
 
     NAME = ""
-    # over ride in effect children to hide existing keys from UI
     HIDDEN_KEYS = None
-    # extend in effect children
     ADVANCED_KEYS: ClassVar[list[str]] = ["diag"]
-    # over ride in effect children to allow edit and show others
     PERMITTED_KEYS = None
     USES_MELBANK_RANGE = False
     _config = None
     _active = False
     _virtual: "Virtual | None" = None
 
-    # Basic effect properties that can be applied to all effects
     class Config(PluginConfig):
         blur: CoercedFloat = Field(
             0.0, description="Amount to blur the effect", ge=0.0, le=10
@@ -332,8 +220,6 @@ class Effect(BaseRegistry):
         with self.lock:
             self._virtual = virtual
             self.pixels = np.zeros((virtual.effective_pixel_count, 3))
-            # Iterate all the base classes and check to see if the base
-            # class has an on_activate method. If so, call it
             valid_classes = list(type(self).__bases__)
             valid_classes.append(type(self))
             for base in valid_classes:
@@ -343,8 +229,6 @@ class Effect(BaseRegistry):
             _LOGGER.info("Effect %s activated.", self.NAME)
 
     def _deactivate(self):
-        # we need this wrapper to ensure the full chain of
-        # deactivation is protected
         with self.lock:
             self.deactivate()
 
@@ -352,7 +236,6 @@ class Effect(BaseRegistry):
         """Detaches an output channel from the effect"""
         self.pixels = None
         self._virtual = None  # Clear circular reference to allow garbage collection
-        # Clear LogSecHelper reference to this effect
         if self.logsec:
             self.logsec.effect = None
             self.logsec.diag = False
@@ -371,15 +254,12 @@ class Effect(BaseRegistry):
                 config = self._config.as_dict() | config
             validated_config = type(self).config_model().model_validate(config)
 
-            # A failing config_updated hook restores this, derived state included.
             old_state, old_diag = dict(vars(self)), self.logsec.diag
             self._config = validated_config
 
             bg_color = parse_color(self.config.background_color)
-            # if bg color is black then flag we don't need to run at render time
             self.bg_color_use = bg_color != parse_color(LEDFX_COLORS["black"])
 
-            # calculate colors always as they are used sometimes anyway
             self._bg_color = np.array(bg_color) * self.config.background_brightness
             self._bg_color_pil = tuple(
                 int(c * self.config.background_brightness) for c in bg_color
@@ -395,8 +275,6 @@ class Effect(BaseRegistry):
                     return cls.foo == super(cls).foo
                 return False
 
-            # Iterate all the base classes and check to see if there is a custom
-            # implementation of config updates. If to notify the base class.
             valid_classes = list(type(self).__bases__)
             valid_classes.append(type(self))
             try:
@@ -416,52 +294,36 @@ class Effect(BaseRegistry):
                 )
 
     def config_updated(self, config):
-        """
-        Optional event for when an effect's config is updated. This
-        should be used by the subclass only if they need to build up
-        complex properties off the configuration, otherwise the config
-        should just be referenced in the effect's loop directly
-        """
+        """Optional event for when an effect's config is updated."""
 
     def _render(self):
         with self.lock:
-            # its possible we were waiting on the effect being deactivated
             if self._active:
                 self.log_sec()
                 self.render()
                 self.try_log()
 
     def render(self):
-        """
-        To be implemented by child effect
-        Must act on self.pixels, setting the values of it
-        The effect can use self.pixels to see the previous effect
+        """To be implemented by child effect Must act on self.pixels, setting the
+        values of it The effect can use self.pixels to see the previous effect
         frame if it wants to use it for something
         """
 
     def get_pixels(self):
-        """
-        Get the current pixels for the effect and apply flip, mirror, blur, brightness and background color transformations
-
-        Returns:
-            numpy.ndarray: The modified pixel array.
+        """Get the current pixels for the effect and apply flip, mirror, blur,
+        brightness and background color transformations
         """
         with self.lock:
             pixels = None
             if hasattr(self, "pixels"):
                 if self.pixels is not None:
                     pixels = np.copy(self.pixels)
-                    # Grab the config and store it here for use in the function - we use it a lot
                     config = self.config
 
-                    # Apply some of the base output filters if necessary
                     if self.flip:
                         pixels = np.flipud(pixels)
 
                     if self.mirror:
-                        # concatenate the pixels for mirror, then take the max of adjacent pixels
-                        # prevents average dimming and is best compromise, removes flicker
-                        # inherently symetrical
                         mirrored_pixels = np.concatenate((pixels[::-1], pixels))
                         pixels = np.maximum(mirrored_pixels[::2], mirrored_pixels[1::2])
 
@@ -476,17 +338,8 @@ class Effect(BaseRegistry):
                             casting="unsafe",
                         )
 
-                    # If the configured blur is greater than 0 and pixel_count > 3, apply blur
-                    # The matrix math requires > 3 pixels to work properly
-                    # And blurring with a less than 3 pixels seems... redundant
-                    # TODO: Handle RGBW properly
                     if config.blur != 0.0 and self.pixel_count > 3:
                         kernel = _gaussian_kernel1d(config.blur, 0, len(pixels))
-
-                        # Blur the R,G,B portions of the pixel array
-                        # Lots of attempts at vectorisation/performance improvements here
-                        # This appears to be optimal from a readability/performance point of view
-                        # TODO: If we ever move to RGBW pixel arrays, uncomment the last line to operate on the W portion
 
                         pixels[:, 0] = np.convolve(
                             pixels[:, 0], kernel, mode="same"
@@ -497,7 +350,6 @@ class Effect(BaseRegistry):
                         pixels[:, 2] = np.convolve(
                             pixels[:, 2], kernel, mode="same"
                         )  # B
-                        # pixels[:, 3] = np.convolve(pixels[:, 3], kernel, mode="same") # W
                 return pixels
 
     @property

@@ -48,10 +48,8 @@ class TestThumbnailCaching:
         key2 = cache._generate_cache_key(url, params)
         key3 = cache._generate_cache_key(url, None)
 
-        # Same URL and params should generate same key
         assert key1 == key2
 
-        # Same URL but no params should generate different key
         assert key1 != key3
 
     def test_cache_key_different_params(self, cache):
@@ -67,7 +65,6 @@ class TestThumbnailCaching:
         key3 = cache._generate_cache_key(url, params3)
         key4 = cache._generate_cache_key(url, params4)
 
-        # All different params should generate different keys
         assert key1 != key2  # Different size
         assert key1 != key3  # Different dimension
         assert key1 != key4  # Different animated
@@ -82,12 +79,10 @@ class TestThumbnailCaching:
 
         cache.put(url, sample_thumbnail_data, "image/png", params=params)
 
-        # Should retrieve with same params
         cached_path = cache.get(url, params)
         assert cached_path is not None
         assert os.path.exists(cached_path)
 
-        # Verify data
         with open(cached_path, "rb") as f:
             assert f.read() == sample_thumbnail_data
 
@@ -99,7 +94,6 @@ class TestThumbnailCaching:
 
         cache.put(url, sample_thumbnail_data, "image/png", params=params1)
 
-        # Should hit with same params
         assert cache.get(url, params1) is not None
 
         # Should miss with different params

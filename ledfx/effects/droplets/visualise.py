@@ -6,8 +6,6 @@ import matplotlib
 import numpy as np
 from matplotlib import pyplot as plt
 
-# Run this to visualise all effectlets as pngs + gifs
-
 for npyfilename in glob.glob("*.npy"):
     # png
     img_array = np.load(npyfilename, allow_pickle=True)

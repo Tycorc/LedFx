@@ -15,7 +15,6 @@ from PIL import Image
 
 _LOGGER = logging.getLogger(__name__)
 
-# LED correction parameters
 LED_PUNCHY_CONFIG = {
     "max_value": 0.95,  # Higher brightness cap
     "max_saturation": 1.0,  # Full saturation
@@ -37,56 +36,36 @@ LED_MAX_CONFIG = {
     "white_replacement": "#FFFFFF",  # Pure white
 }
 
-# Color deduplication parameters
 COLOR_DISTANCE_THRESHOLD = 0.20  # HSV distance threshold (0.0-1.0)
 DEDUP_MIN_COLORS = 3  # Minimum colors to keep after deduplication
 WHITE_REPLACE_MIN_V = (
     0.95  # was effectively 0.85 in the condition; raises the bar a lot
 )
-# Hue is weighted more heavily as it's most perceptually significant
-# Saturation and Value differences are less critical for LED gradients
 
-# === Background cluster detection (minimal additions) =========================
-# Detect any dominant background color (>50% frequency) to trigger interleaved banding
 BACKGROUND_CLUSTER_THRESHOLD = 0.50
-# Legacy thresholds kept for accent masking (only works for dark backgrounds)
 BG_DARK_V = (
     0.16  # Value below which colors are considered "dark" enough to be background
 )
 BG_LOW_S = 0.18  # Saturation below which colors are "background-ish" if also dark
 BG_LOW_S_V = 0.28  # Value below which low-saturation colors are also "background-ish"
 
-# === Accent masking (minimal additions) =======================================
-# When a background cluster exists, remove “background-ish” pixels before quantize
 MASK_DARK_V = 0.12  # Value below which colors are considered "dark" enough to be masked
 MASK_LOW_S = (
     0.10  # Saturation below which colors are considered "background-ish" if also dark
 )
 MASK_LOW_S_V = 0.22  # Value below which low-saturation colors are also "background-ish"
 MIN_MASKED_PIXELS_FRACTION = 0.02  # require at least 2% pixels remain
-# === Color similarity distance weights =======================================
-# Used for perceptual color similarity calculations in HSV space
-# Different weight profiles for gray vs saturated colors
 
-# Gray/low-saturation colors (s < 0.15): Value difference is most important
-# because hue is meaningless for grays
 GRAY_HUE_WEIGHT = 0.1  # Minimal hue influence for grays
 GRAY_SAT_WEIGHT = 0.2  # Some saturation difference matters
 GRAY_VAL_WEIGHT = 0.7  # Brightness difference is primary distinguisher
 
-# Saturated colors (s >= 0.15): Hue difference is most important
-# for distinguishing distinct colors (red vs blue vs green)
 SATURATED_HUE_WEIGHT = 0.65  # Hue is primary distinguisher
 SATURATED_SAT_WEIGHT = 0.20  # Saturation difference is secondary
 SATURATED_VAL_WEIGHT = 0.15  # Brightness difference is tertiary
 
-# Similarity thresholds for color deduplication
 SATURATED_COLOR_THRESHOLD = 0.12  # Tighter threshold for distinct saturated colors
-# COLOR_DISTANCE_THRESHOLD (0.20) defined above is used for grays/near-grays
 
-# === Gradient building parameters ==========================================
-# Blend fraction for "island" gradient stops: controls smoothness of color transitions
-# Higher values create more blending between color bands, lower values create harder edges
 BLEND_FRAC = 0.10  # Typical range: 0.05-0.15
 
 
@@ -110,31 +89,24 @@ def extract_dominant_colors(
         ]
     """
     try:
-        # Convert to RGB if needed (handles RGBA, grayscale, etc.)
         if pil_image.mode != "RGB":
             pil_image = pil_image.convert("RGB")
 
-        # Optional: build an "accent-only" sample image to prevent background dominance
         src_img = pil_image
         if use_accent_mask:
             masked_img = _build_accent_sample_image(pil_image)
             if masked_img is not None:
                 src_img = masked_img
 
-        # Quantize to extract dominant colors
-        # Using MEDIANCUT for better color distribution
         quantized = src_img.quantize(colors=n_colors, method=Image.Quantize.MEDIANCUT)
 
-        # Get palette colors
         palette = quantized.getpalette()[: n_colors * 3]  # RGB triplets
         palette_colors = [palette[i : i + 3] for i in range(0, len(palette), 3)]
 
-        # Count pixels per color to get frequency
         pixel_array = np.array(quantized, dtype=np.uint8)
         total_pixels = pixel_array.size
         color_frequencies = []
 
-        # Vectorized counts per palette index
         counts = np.bincount(pixel_array.ravel(), minlength=len(palette_colors))
         freqs = counts / float(total_pixels) if total_pixels else np.zeros_like(counts)
 
@@ -143,7 +115,6 @@ def extract_dominant_colors(
             if frequency <= 0.0:
                 continue
 
-            # Convert to HSV
             r, g, b = (c / 255.0 for c in rgb)
             h, s, v = colorsys.rgb_to_hsv(r, g, b)
 
@@ -155,17 +126,14 @@ def extract_dominant_colors(
                 }
             )
 
-        # Sort by frequency (most dominant first)
         color_frequencies.sort(key=lambda x: x["frequency"], reverse=True)
 
-        # Deduplicate similar colors to prevent gradient dominated by close variants
         deduplicated = _deduplicate_colors(color_frequencies)
 
         return deduplicated
 
     except Exception:
         _LOGGER.warning("Failed to extract dominant colors", exc_info=True)
-        # Return single average color as fallback
         try:
             avg_color = pil_image.resize((1, 1)).getpixel((0, 0))
             if isinstance(avg_color, int):  # Grayscale
@@ -181,7 +149,6 @@ def extract_dominant_colors(
             ]
         except Exception:
             _LOGGER.warning("Failed to extract average color fallback", exc_info=True)
-            # Return safe default (black) if even fallback fails
             return [{"rgb": [0, 0, 0], "hsv": [0.0, 0.0, 0.0], "frequency": 1.0}]
 
 
@@ -209,7 +176,6 @@ def _build_accent_sample_image(
         delt = maxc - minc
         s = np.where(maxc > 1e-6, delt / (maxc + 1e-6), 0.0)
 
-        # Background-ish pixels to exclude
         bg = (v < MASK_DARK_V) | ((s < MASK_LOW_S) & (v < MASK_LOW_S_V))
         keep = ~bg
 
@@ -248,7 +214,6 @@ def _deduplicate_colors(colors: list[dict]) -> list[dict]:
     if len(colors) <= 1:
         return colors
 
-    # 1) Normal merge pass
     merged: list[dict] = []
     for color in colors:
         merged_into = None
@@ -264,13 +229,9 @@ def _deduplicate_colors(colors: list[dict]) -> list[dict]:
 
     merged.sort(key=lambda x: x["frequency"], reverse=True)
 
-    # 2) Floor recovery: if we collapsed too far, pick distinct colors
     if len(merged) >= DEDUP_MIN_COLORS or len(colors) <= DEDUP_MIN_COLORS:
         return merged
 
-    # Build a "most distinct" selection from the original (pre-merge) list.
-    # Always keep the most frequent first, then greedily add colors that are farthest
-    # (by the same weighted HSV distance idea) from what we've already picked.
     picked: list[dict] = [colors[0].copy()]
 
     def _weighted_hsv_distance(hsv1, hsv2) -> float:
@@ -300,20 +261,16 @@ def _deduplicate_colors(colors: list[dict]) -> list[dict]:
 
         return hue_w * hue_diff + sat_w * sat_diff + val_w * val_diff
 
-    # Greedy farthest-point sampling
     while len(picked) < DEDUP_MIN_COLORS and len(picked) < len(colors):
         best = None
         best_score = -1.0
 
         for cand in colors:
-            # skip if already picked (by exact rgb match)
             if any(cand["rgb"] == p["rgb"] for p in picked):
                 continue
 
-            # distance to the closest picked color
             d_min = min(_weighted_hsv_distance(cand["hsv"], p["hsv"]) for p in picked)
 
-            # Prefer higher frequency as a tiebreaker
             score = d_min + 0.05 * float(cand["frequency"])
 
             if score > best_score:
@@ -325,7 +282,6 @@ def _deduplicate_colors(colors: list[dict]) -> list[dict]:
 
         picked.append(best.copy())
 
-    # Recompute frequencies normalized across picked (so downstream weighting behaves)
     total = sum(float(c["frequency"]) for c in picked) or 1.0
     for c in picked:
         c["frequency"] = float(c["frequency"]) / total
@@ -348,27 +304,20 @@ def _colors_similar(hsv1: list[float], hsv2: list[float]) -> bool:
     h1, s1, v1 = hsv1
     h2, s2, v2 = hsv2
 
-    # Hue distance (circular, 0-1 wraps around)
-    # Hue difference can be at most 0.5 (opposite sides of color wheel)
     hue_diff = abs(h1 - h2)
     if hue_diff > 0.5:
         hue_diff = 1.0 - hue_diff
 
-    # Saturation and Value are linear [0, 1]
     sat_diff = abs(s1 - s2)
     val_diff = abs(v1 - v2)
 
-    # Weighted distance: Hue is most important for distinctness
-    # For very low saturation (grays), rely more on Value difference
     avg_saturation = (s1 + s2) / 2
 
     if avg_saturation < 0.15:
-        # Low saturation (grays/near-grays): Use Value primarily
         hue_weight = GRAY_HUE_WEIGHT
         sat_weight = GRAY_SAT_WEIGHT
         val_weight = GRAY_VAL_WEIGHT
     else:
-        # Saturated colors: Hue is most important
         hue_weight = SATURATED_HUE_WEIGHT
         sat_weight = SATURATED_SAT_WEIGHT
         val_weight = SATURATED_VAL_WEIGHT
@@ -377,8 +326,6 @@ def _colors_similar(hsv1: list[float], hsv2: list[float]) -> bool:
         hue_weight * hue_diff + sat_weight * sat_diff + val_weight * val_diff
     )
 
-    # Tighten threshold for saturated colors so distinct hues (e.g. red vs yellow)
-    # don't get merged. Keep the looser threshold for grays/near-grays.
     if avg_saturation >= 0.25:
         threshold = SATURATED_COLOR_THRESHOLD
     else:
@@ -407,8 +354,6 @@ def detect_dominant_background(
     if not colors:
         return None
 
-    # Simply check if the most frequent color exceeds threshold
-    # Colors are already sorted by frequency (most frequent first)
     most_frequent = colors[0]
 
     if most_frequent["frequency"] >= threshold:
@@ -429,58 +374,45 @@ def apply_led_correction(rgb: list[int], mode: str = "punchy") -> list[int]:
         Corrected RGB color as [R, G, B]
     """
     if mode == "safe":
-        # LED-safe is raw colors with no correction (for compatibility)
         return rgb
     elif mode == "max":
         config = LED_MAX_CONFIG
     else:  # punchy
         config = LED_PUNCHY_CONFIG
 
-    # Convert to HSV for easier manipulation
     r, g, b = (c / 255.0 for c in rgb)
     h, s, v = colorsys.rgb_to_hsv(r, g, b)
 
-    # Detect and replace near-white colors FIRST
     if s < config["white_threshold"] and v > WHITE_REPLACE_MIN_V:
-        # Replace with defined white
         white_hex = config["white_replacement"]
         white_rgb = tuple(int(white_hex[i : i + 2], 16) for i in (1, 3, 5))
         return list(white_rgb)
 
-    # Apply brightness cap
     v = min(v, config["max_value"])
 
-    # Apply brightness boost for darker colors (max mode only)
-    # Exclude background-like colors (very dark or low-sat dark)
     is_background = (v < 0.16) or (s < 0.18 and v < 0.28)
     if "brightness_boost" in config and v < 0.8 and not is_background:
         boost = config["brightness_boost"]
         v = v + (1.0 - v) * boost
 
-    # Apply saturation boost (pull towards primary colors)
     if s > 0.1:  # Only boost non-gray colors
         boost = config["saturation_boost"]
         s = s + (1.0 - s) * boost
 
-    # Apply saturation cap
     s = min(s, config["max_saturation"])
 
-    # Convert back to RGB with adjustments
     r_adjusted, g_adjusted, b_adjusted = colorsys.hsv_to_rgb(h, s, v)
 
-    # Apply gamma correction
     gamma = config["gamma"]
     r_gamma = pow(r_adjusted, 1.0 / gamma)
     g_gamma = pow(g_adjusted, 1.0 / gamma)
     b_gamma = pow(b_adjusted, 1.0 / gamma)
 
-    # Blend between adjusted color and gamma-corrected color
     gamma_blend = config["gamma_blend"]
     r_final = r_adjusted * (1.0 - gamma_blend) + r_gamma * gamma_blend
     g_final = g_adjusted * (1.0 - gamma_blend) + g_gamma * gamma_blend
     b_final = b_adjusted * (1.0 - gamma_blend) + b_gamma * gamma_blend
 
-    # Clamp to valid range and convert to 0-255
     rgb_corrected = [
         int(max(0, min(255, c * 255))) for c in [r_final, g_final, b_final]
     ]
@@ -517,13 +449,8 @@ def build_gradient_stops(
     stops = []
 
     if background_color:
-        # Interleaved pattern: bg → accent → bg → accent
-        # Remove the background color itself from accent colors
         bg_rgb = tuple(background_color["rgb"])
         accent_colors = [c for c in colors if tuple(c["rgb"]) != bg_rgb]
-        # Use all extracted accent colors - extraction already limits to 9 total colors
-        # Each accent needs 3 stops (bg, accent_start, accent_end) + 1 final bg
-        # Total stops = 3N + 1 (e.g., 8 accents = 25 stops)
 
         if not accent_colors:
             # Edge case: only background color, create simple gradient
@@ -543,8 +470,6 @@ def build_gradient_stops(
         else:
             accent_weights = [1.0 / len(accent_colors)] * len(accent_colors)
 
-        # Build pattern: bg, accent_start, accent_end, bg, accent_start, accent_end, bg, ...
-        # Each accent gets two stops to create a flat region with defined width
         num_accents = len(accent_colors)
         num_sections = num_accents
         section_width = 1.0 / num_sections
@@ -597,8 +522,6 @@ def build_gradient_stops(
         stops.append({"color": bg_hex, "position": 1.0, "type": "background"})
 
     else:
-        # Normal weighted gradient (no dominant background)
-        # Use all extracted colors - extraction already limits to 9 colors
         gradient_colors = colors
 
         if not gradient_colors:
@@ -642,10 +565,6 @@ def build_gradient_stops(
             starts.append(starts[-1] + w)
         ends = [s + w for s, w in zip(starts, widths)]
         ends[-1] = 1.0  # force exact end
-
-        # Emit "islands" with soft boundaries:
-        # For each boundary at ends[i], keep color_i flat until (end-b),
-        # then allow interpolation across (end-b .. end+b) by switching to next at (end+b).
 
         # First stop at 0
         c0 = gradient_colors[0]
@@ -823,8 +742,6 @@ def _extract_gradient_metadata_from_image(
             pil_image, n_colors=9, use_accent_mask=(background is not None)
         )
 
-        # Fail-open: if accent masking collapses the palette, reuse the full-image palette.
-        # This prevents losing small but important low-saturation warm tones (e.g., yellows).
         if background is not None and len(colors) < 5:
             _LOGGER.debug(
                 "Accent pass produced too few colors (%d). Falling back to full-image accents (background removed).",

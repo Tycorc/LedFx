@@ -1,9 +1,4 @@
-"""Now Playing Service implementation.
-
-Centralized service managing current media playback state.
-Receives normalized metadata from providers and exposes a single
-source of truth for the rest of LedFx.
-"""
+"""Now Playing Service implementation."""
 
 import hashlib
 import io
@@ -56,11 +51,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _sanitize_url(url: str) -> str:
-    """Return a safe-for-logging version of *url*.
-
-    Strips query strings (which may carry access tokens) and removes
-    any userinfo/credentials from the netloc.
-    """
+    """Strip query strings and credentials before logging a URL."""
     try:
         parsed = urllib.parse.urlparse(url)
         netloc = parsed.hostname or ""
@@ -71,20 +62,14 @@ def _sanitize_url(url: str) -> str:
         return "<url>"
 
 
-# Sources that supply their own artwork (e.g. via set_artwork_url).
-# The album-art resolver (MusicBrainz etc.) is never invoked for these.
 _SOURCES_WITH_OWN_ARTWORK = {"sendspin"}
 
-# Higher number = higher priority.  A source will pre-empt the current
-# active source if its priority is strictly greater.
-# smtc is a passive system-wide poller; sendspin is an explicit integration.
 _SOURCE_PRIORITY: dict[str, int] = {
     "sendspin": 10,
     "mpris": 2,
     "smtc": 1,
 }
 
-# Content-type to file extension mapping
 _EXTENSION_MAP = {
     "image/gif": ".gif",
     "image/png": ".png",
@@ -94,34 +79,24 @@ _EXTENSION_MAP = {
     "image/tiff": ".tiff",
 }
 
-# Subdirectory within assets for now-playing artwork
 _NOW_PLAYING_ASSET_DIR = "now_playing"
-# Fixed base filename for the single artwork file
 _ARTWORK_FILENAME = "now_playing"
 
 
 class NowPlayingService:
-    """Provider-neutral Now Playing state manager.
-
-    Attributes:
-        ledfx: Reference to the LedFxCore instance.
-        state: Current NowPlayingState.
-    """
+    """Provider-neutral Now Playing state manager."""
 
     def __init__(self, ledfx):
         self._ledfx = ledfx
         self._state = NowPlayingState()
 
-        # Load persisted configuration
         self._config = ledfx.config.now_playing.model_dump()
 
-        # Apply gradient settings from config
         grad_cfg = self._config["gradient"]
         self._gradient_enabled = grad_cfg["enabled"]
         self._gradient_virtual_ids: list[str] = list(grad_cfg["virtual_ids"])
         self._state.selected_gradient_variant = grad_cfg["variant"]
 
-        # Album-art resolver (async, non-blocking)
         self._art_resolver = AlbumArtResolver(
             providers=[MusicBrainzArtProvider()],
             service=self,
@@ -129,28 +104,13 @@ class NowPlayingService:
 
         _LOGGER.info("Now Playing Service initialized")
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def set_metadata(self, source_id: str, metadata: TrackMetadata) -> bool:
-        """Update current track metadata from a provider.
-
-        Args:
-            source_id: Provider identifier (e.g. "sendspin").
-            metadata: Normalized track metadata.
-
-        Returns:
-            True if a track change was detected, False otherwise.
-        """
+        """Update current track metadata from a provider."""
         now = time.time()
         metadata.updated_at = now
 
-        # Determine if this is a new track
         track_changed = self._detect_track_change(metadata)
 
-        # Activate source on first metadata, or if a higher-priority source
-        # pre-empts the current active source.
         incoming_priority = _SOURCE_PRIORITY.get(source_id, 0)
         active_priority = _SOURCE_PRIORITY.get(self._state.active_source_id or "", 0)
         if self._state.active_source_id is None:
@@ -168,10 +128,8 @@ class NowPlayingService:
                 active_priority,
             )
             self._state.active_source_id = source_id
-            # Cancel any in-flight resolver work started for the old source.
             self._art_resolver.cancel_pending()
 
-        # Only update state if this provider is the active source
         if source_id != self._state.active_source_id:
             _LOGGER.debug(
                 "Ignoring metadata from inactive source: %s (active: %s)",
@@ -183,8 +141,6 @@ class NowPlayingService:
         self._state.metadata = metadata
         self._state.updated_at = now
 
-        # Only fire the metadata event when content-carrying fields change;
-        # position-only ticks (progress updates) are not worth broadcasting.
         if track_changed or self._metadata_content_changed(metadata):
             self._fire_event(
                 NowPlayingMetadataChangedEvent(source_id, metadata.to_dict())
@@ -215,35 +171,16 @@ class NowPlayingService:
         content_type: str | None = None,
         artwork_hash: str | None = None,
     ) -> bool:
-        """Set artwork from a URL, download it, and extract gradients.
-
-        Downloads the image, saves it as a single ``now_playing.{ext}``
-        file (overwriting any previous artwork), and runs gradient
-        extraction via the existing pipeline.
-
-        Args:
-            source_id: Provider identifier.
-            url: URL to the artwork image.
-            content_type: MIME type of the image.
-            artwork_hash: Hash for change detection.
-
-        Returns:
-            True if artwork changed, False otherwise.
-        """
+        """Set artwork from a URL, download it, and extract gradients."""
         if source_id != self._state.active_source_id:
             return False
 
-        # Source is providing artwork directly — cancel any in-flight
-        # MusicBrainz (or other resolver) lookup for the current track so it
-        # cannot overwrite what the source already knows is correct.
         self._art_resolver.cancel_pending()
 
-        # Detect artwork change
         current = self._state.artwork
         if current and current.url == url and current.hash == artwork_hash:
             return False
 
-        # Download the image
         data, detected_content_type = self._download_image(url)
         if data is None:
             _LOGGER.warning("Failed to download artwork from %s", _sanitize_url(url))
@@ -252,11 +189,9 @@ class NowPlayingService:
         if content_type is None:
             content_type = detected_content_type
 
-        # Compute hash from downloaded bytes if not provided
         if artwork_hash is None:
             artwork_hash = hashlib.sha256(data).hexdigest()[:16]
 
-        # Save to disk and extract gradients
         artwork_path, gradients, width, height = self._store_artwork(data, content_type)
 
         self._state.artwork = ArtworkReference(
@@ -286,32 +221,17 @@ class NowPlayingService:
         content_type: str,
         artwork_hash: str | None = None,
     ) -> bool:
-        """Set artwork from raw image bytes.
-
-        Saves the bytes as a single ``now_playing.{ext}`` file
-        (overwriting any previous artwork) and runs gradient extraction.
-
-        Args:
-            source_id: Provider identifier.
-            data: Raw image bytes.
-            content_type: MIME type of the image.
-            artwork_hash: Hash for change detection. If None, computed from data.
-
-        Returns:
-            True if artwork changed, False otherwise.
-        """
+        """Set artwork from raw image bytes."""
         if source_id != self._state.active_source_id:
             return False
 
         if artwork_hash is None:
             artwork_hash = hashlib.sha256(data).hexdigest()[:16]
 
-        # Detect artwork change
         current = self._state.artwork
         if current and current.hash == artwork_hash:
             return False
 
-        # Save to disk and extract gradients
         artwork_path, gradients, width, height = self._store_artwork(data, content_type)
 
         self._state.artwork = ArtworkReference(
@@ -342,22 +262,7 @@ class NowPlayingService:
         content_type: str,
         artwork_hash: str | None = None,
     ) -> bool:
-        """Set artwork resolved by the internal album-art resolver.
-
-        Unlike :meth:`set_artwork_bytes`, this method is not gated on
-        ``source_id``.  It is intended solely for use by
-        :class:`~ledfx.nowplaying.album_art.resolver.AlbumArtResolver`.
-
-        If there is no active source, the call is silently ignored.
-
-        Args:
-            data: Raw image bytes.
-            content_type: MIME type of the image.
-            artwork_hash: Optional hash for change detection.
-
-        Returns:
-            True if artwork changed, False otherwise.
-        """
+        """Accept resolver artwork for the active source; ignore calls without one."""
         if self._state.active_source_id is None:
             return False
 
@@ -392,14 +297,7 @@ class NowPlayingService:
         return True
 
     def clear_artwork(self, source_id: str) -> None:
-        """Clear artwork for the active source without resetting track metadata.
-
-        Called when a source explicitly signals that artwork is no longer
-        available (e.g. Sendspin sets artwork_url to None).
-
-        Args:
-            source_id: Provider identifier.
-        """
+        """Clear artwork for the active source without resetting track metadata."""
         if self._state.active_source_id != source_id:
             return
         if self._state.artwork is None:
@@ -411,13 +309,7 @@ class NowPlayingService:
         self._fire_event(NowPlayingArtworkChangedEvent(source_id, {}))
 
     def clear(self, source_id: str) -> None:
-        """Clear state for a provider.
-
-        If the cleared provider is the active source, resets all state.
-
-        Args:
-            source_id: Provider identifier to clear.
-        """
+        """Clear state for a provider."""
         if self._state.active_source_id == source_id:
             _LOGGER.info("Clearing Now Playing state for active source: %s", source_id)
             prev_variant = self._state.selected_gradient_variant
@@ -431,11 +323,7 @@ class NowPlayingService:
             )
 
     def get_current(self) -> NowPlayingState:
-        """Return the current Now Playing state.
-
-        Returns:
-            The current NowPlayingState instance.
-        """
+        """Return the current Now Playing state."""
         return self._state
 
     @property
@@ -462,27 +350,11 @@ class NowPlayingService:
         return dict(self._config)
 
     def update_config(self, new_config: dict) -> dict:
-        """Validate, apply and persist a new configuration.
-
-        Merges *new_config* with the current configuration, validates
-        the result against :class:`NowPlayingConfig`, applies
-        the settings to the service, and saves to disk.
-
-        Args:
-            new_config: Partial or full configuration dict.
-
-        Returns:
-            The validated, complete configuration dict.
-
-        Raises:
-            pydantic.ValidationError: If validation fails.
-        """
-        # Merge: new values override current, then validate
+        """Validate, apply and persist a new configuration."""
         merged = {**self._config}
         for section in ("gradient", "track_text", "album_art"):
             if section in new_config:
                 value = new_config[section]
-                # Not an object: left as is for validation to report.
                 merged[section] = (
                     {**merged.get(section, {}), **value}
                     if isinstance(value, dict)
@@ -492,7 +364,6 @@ class NowPlayingService:
         validated = NowPlayingConfig.model_validate(merged).model_dump()
         self._config = validated
 
-        # Apply gradient settings
         grad_cfg = validated["gradient"]
         self._gradient_enabled = grad_cfg["enabled"]
         self._gradient_virtual_ids = list(grad_cfg["virtual_ids"])
@@ -500,11 +371,9 @@ class NowPlayingService:
         old_variant = self._state.selected_gradient_variant
         self._state.selected_gradient_variant = grad_cfg["variant"]
 
-        # Re-resolve gradient if variant changed
         if grad_cfg["variant"] != old_variant:
             self._update_current_gradient()
 
-        # Persist to core config
         self._persist_config()
 
         return dict(validated)
@@ -597,7 +466,6 @@ class NowPlayingService:
         if not metadata:
             return 0
 
-        # Build display string — normalise away YouTube/video noise first
         artist = normalise_artist(metadata.artist)
         title = normalise_title(metadata.title, artist)
         album = normalise_album(metadata.album) or ""
@@ -610,7 +478,6 @@ class NowPlayingService:
         duration = track_text_cfg["duration"]
         preset_name = track_text_cfg.get("preset", "")
 
-        # Resolve preset config: ledfx_presets first, then user_presets
         effect_config = {}
         if preset_name:
             builtin = ledfx_presets.get("texter2d", {}).get(preset_name)
@@ -661,9 +528,6 @@ class NowPlayingService:
 
         duration = album_art_cfg["duration"]
 
-        # Start from the built-in "artwork" preset so settings like bilinear
-        # and test are pre-configured, then override image_source with the
-        # actual artwork path.
         artwork_preset = ledfx_presets.get("imagespin", {}).get("artwork")
         preset_config = artwork_preset["config"] if artwork_preset else {}
         effect_config = {**preset_config, "image_source": artwork.cache_key}
@@ -733,10 +597,6 @@ class NowPlayingService:
         _LOGGER.info("Applied Now Playing %s to %d virtual(s)", label, updated)
         return updated
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
     def _metadata_content_changed(self, new_metadata: TrackMetadata) -> bool:
         """Return True if any content-carrying field (not position) changed."""
         current = self._state.metadata
@@ -750,17 +610,7 @@ class NowPlayingService:
         )
 
     def _detect_track_change(self, new_metadata: TrackMetadata) -> bool:
-        """Compare new metadata against current to detect track changes.
-
-        A track change is detected when the track identity tuple differs.
-        Position-only updates are not considered track changes.
-
-        Args:
-            new_metadata: Incoming metadata to compare.
-
-        Returns:
-            True if the track identity changed.
-        """
+        """Compare track identity; position-only updates do not change the track."""
         current = self._state.metadata
         if current is None:
             return True
@@ -768,16 +618,9 @@ class NowPlayingService:
         return current.track_identity() != new_metadata.track_identity()
 
     def _fire_event(self, event) -> None:
-        """Fire an event if the events system is available.
-
-        Gracefully no-ops if events is not yet initialized (e.g. during testing).
-        """
+        """Fire an event if the events system is available."""
         if hasattr(self._ledfx, "events"):
             self._ledfx.events.fire_event(event)
-
-    # ------------------------------------------------------------------
-    # Artwork storage helpers
-    # ------------------------------------------------------------------
 
     def _get_artwork_relative_path(self, content_type: str) -> str:
         """Return the relative asset path for the now-playing artwork file."""
@@ -785,18 +628,8 @@ class NowPlayingService:
         return f"{_NOW_PLAYING_ASSET_DIR}/{_ARTWORK_FILENAME}{extension}"
 
     def _store_artwork(self, data: bytes, content_type: str) -> tuple:
-        """Save artwork bytes via the asset management system.
-
-        Uses save_asset() with allow_overwrite=True for secure, validated,
-        atomic writes. Extracts gradients directly from the saved file.
-
-        Args:
-            data: Raw image bytes.
-            content_type: MIME type of the image.
-
-        Returns:
-            Tuple of (artwork_path, gradients_dict, width, height).
-            artwork_path is ``None`` when config_dir is unavailable.
+        """Atomically save validated artwork and return (path, gradients, width,
+        height).
         """
         config_dir = getattr(self._ledfx, "config_dir", None)
         if not config_dir:
@@ -804,7 +637,6 @@ class NowPlayingService:
 
         relative_path = self._get_artwork_relative_path(content_type)
 
-        # Use the asset system for validated, atomic write (overwrites in place)
         success, absolute_path, error = save_asset(
             config_dir, relative_path, data, allow_overwrite=True
         )
@@ -812,7 +644,6 @@ class NowPlayingService:
             _LOGGER.error("Failed to save artwork via asset system: %s", error)
             return None, None, None, None
 
-        # Extract image dimensions
         width, height = None, None
         try:
             with Image.open(io.BytesIO(data)) as img:
@@ -820,7 +651,6 @@ class NowPlayingService:
         except Exception as exc:  # noqa: BLE001
             _LOGGER.warning("Could not read image dimensions: %s", exc)
 
-        # Extract gradients directly from the saved file
         gradients = None
         try:
             gradients = extract_gradient_metadata(absolute_path)
@@ -830,11 +660,7 @@ class NowPlayingService:
         return absolute_path, gradients, width, height
 
     def _download_image(self, url: str) -> tuple:
-        """Download an image from *url* with security validation.
-
-        Returns:
-            Tuple of (data_bytes, content_type) or (None, None) on failure.
-        """
+        """Download an image from *url* with security validation."""
         if not is_allowed_image_extension(url):
             _LOGGER.warning("URL has invalid image extension: %s", _sanitize_url(url))
             return None, None
@@ -866,7 +692,6 @@ class NowPlayingService:
                 content_type = resp.headers.get("Content-Type", "image/jpeg")
                 content_type = content_type.split(";")[0].strip().lower()
 
-                # Validate the downloaded image
                 try:
                     img = Image.open(io.BytesIO(data))
                     if not validate_pil_image(img):
@@ -892,8 +717,9 @@ class NowPlayingService:
             return None, None
 
     def _update_current_gradient(self) -> None:
-        """Resolve ``current_gradient`` from artwork gradients and the
-        selected variant. Fires NowPlayingGradientChangedEvent on change."""
+        """Resolve ``current_gradient`` from artwork gradients and the selected
+        variant. Fires NowPlayingGradientChangedEvent on change.
+        """
         artwork = self._state.artwork
         old_gradient = self._state.current_gradient
 
@@ -917,6 +743,5 @@ class NowPlayingService:
                 )
             )
 
-            # Apply gradient to target virtuals if enabled
             if self._gradient_enabled and self._state.current_gradient:
                 self.apply_gradient_to_virtuals()

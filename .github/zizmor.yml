@@ -1,19 +1,4 @@
-# zizmor configuration for LedFx workflows.
-#
-# The lint gate runs zizmor with --min-severity high --persona=auditor:
-# findings below `high` are advisory, not gate failures.
-#
-# Scope notes:
 # - superfluous-actions: advisory action simplifications are not the lint gate.
-# - dangerous-triggers/lint-notify.yml: that workflow is the reviewed, safe
-#   shape of workflow_run — the default-branch version always executes, it
-#   never checks out or executes PR code, and PR-controlled values only ever
-#   reach `gh` as API arguments. See the comment block at the top of the
-#   workflow for the full argument.
-# - dangerous-triggers/pr-title.yml: pull_request_target in the same safe
-#   shape, so the bot can comment on fork PRs: the default-branch workflow
-#   and script run, PR code is never checked out, and the title reaches the
-#   script only as an environment variable.
 rules:
   superfluous-actions:
     disable: true
@@ -22,16 +7,6 @@ rules:
       - lint-notify.yml
       - pr-title.yml
   secrets-outside-env:
-    # Deliberate, not an oversight:
-    # - ci.yml (docker / docker-edge): these jobs run on every PR, and any
-    #   environment with protection rules (production has required reviewers
-    #   plus a branch policy) would block or reject those builds. The Hub
-    #   login step is gated on PUBLISH, so fork PRs never touch the creds.
-    # - lint-notify.yml: AUTOMATION_APP_* is a comment-only app token minted
-    #   per run; there is no environment worth gating a notification behind.
-    #   pr-title.yml mints the same comment-only token.
-    # - release-please.yml: contents/PR/label token for the release PR, tag
-    #   and draft release only; publishing stays behind production in ci.yml.
     # - release-notifications.yml: published releases and default-branch manual
     #   retries only, with code checked out from the default branch. It needs
     #   no second production approval. App contents-write persists delivery

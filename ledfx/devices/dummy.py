@@ -11,8 +11,6 @@ from ledfx.utils import BaseRegistry
 _LOGGER = logging.getLogger(__name__)
 
 
-# This wrapper is required to prevent config_update lifecycle breakage
-# You cannot inherit from Device directly
 @BaseRegistry.no_registration
 class DeviceWrapper(Device):
     pass
@@ -36,13 +34,4 @@ class DummyDevice(DeviceWrapper):
         self._device_type = "Dummy"
 
     def flush(self, data: ndarray) -> None:
-        """
-        Throw pixels into the abyss
-
-        Args:
-            data (ndarray): The LED data to be flushed.
-
-        Raises:
-            AttributeError: If an attribute error occurs during the flush.
-            OSError: If an OS error occurs during the flush.
-        """
+        """Discard pixels; this device exists only for browser previews."""

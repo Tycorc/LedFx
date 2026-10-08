@@ -67,9 +67,6 @@ class AlbumArtResolver:
             self._resolve_task.cancel()
             self._resolve_task = None
 
-        # If the source already supplies an artwork URL, the service will
-        # download it directly — MusicBrainz is only a fallback for sources
-        # that provide no artwork (e.g. SMTC without thumbnail).
         if metadata.artwork_url:
             _LOGGER.debug(
                 "AlbumArtResolver: artwork URL provided by source, skipping lookup"
@@ -83,10 +80,6 @@ class AlbumArtResolver:
             return
 
         self._resolve_task = asyncio.ensure_future(self._resolve(metadata), loop=loop)
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _normalize_key(metadata: TrackMetadata) -> tuple:

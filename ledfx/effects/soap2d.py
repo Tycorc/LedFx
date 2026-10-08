@@ -50,26 +50,19 @@ class Soap2D(Twod, GradientEffect):
 
     def __init__(self, ledfx, config):
         super().__init__(ledfx, config)
-        # noise library
         self._fnl = None  # fastnoiselite instance
-        # noise state
         self._phase = None  # x,y drift (2D)
         self._noise = None  # (H,W) float32 [0..1]
-        # persistent pixels
         self._pixels_prev = None  # (H,W,3) float32 0..255
-        # dims
         self._h = 0
         self._w = 0
-        # tuning
         self._freq = 3.0
 
         self._need_seed = True
         self.impulse = 0.0
 
-        # cached ramps (per resolution)
         self._x_ramp = None  # (W,) float32 0..W-1
         self._y_ramp = None  # (H,) float32 0..H-1
-        # cached indices for smear (per resolution)
         self._j_w = None  # (1,W) int32
         self._j_h = None  # (1,H) int32
 
@@ -153,8 +146,6 @@ class Soap2D(Twod, GradientEffect):
         x = x0 + step_x * self._x_ramp
         y = y0 + step_y * self._y_ramp
 
-        # FastNoiseLite uses gen_from_coords for vectorized generation
-        # Create meshgrid for 2D coordinates
         x_grid, y_grid = np.meshgrid(x, y, indexing="xy")
         # Flatten coordinates
         x_flat = x_grid.flatten()
@@ -201,8 +192,6 @@ class Soap2D(Twod, GradientEffect):
         wB = frac * frac * (3.0 - 2.0 * frac)
 
         if axis == 1:
-            # Smear across X (horizontal)
-            # Create index arrays: rows stay fixed, columns shift
             row_idx = np.arange(H)[:, None]  # (H, 1)
             col_base = np.arange(W)[None, :]  # (1, W)
 
@@ -346,8 +335,6 @@ class Soap2D(Twod, GradientEffect):
         amt_rows = (self._noise[:, 0] - 0.5) * base_amp_x  # (H,)
         amt_cols = (self._noise[0, :] - 0.5) * base_amp_y  # (W,)
 
-        # smear rows then columns, using previous pixels as in-bounds taps,
-        # and current palette as OOB taps (matches WLED soapPixels)
         after_rows = self._smear_axis_signed_oob(
             self._pixels_prev, palette_rgb, amt_rows, axis=1
         )

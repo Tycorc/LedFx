@@ -14,12 +14,7 @@ class FindLaunchpadDevicesEndpoint(RestEndpoint):
     ENDPOINT_PATH = "/api/find_launchpad"
 
     async def get(self) -> web.Response:
-        """
-        Check for launchpad present
-
-        Returns:
-            web.Response: The response containing the information about the launchpad.
-        """
+        """Check for launchpad present"""
         try:
             found = find_launchpad()
         except Exception as msg:  # noqa: BLE001

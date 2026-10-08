@@ -42,8 +42,6 @@ SKIP_PARTS = {".venv", ".git", "__pycache__", "ledfx_frontend", "build", "dist"}
 
 SCALARS = {"str", "int", "float", "bool", "bytes"}
 
-# numeric tower: int and bool are assignable where float is annotated,
-# bool where int is annotated (https://typing.python.org spec).
 _NUMERIC_TOWER = {"float": {"int", "bool"}, "int": {"bool"}}
 
 
@@ -89,8 +87,6 @@ def _scalar_ok(ann_name: str, const: ast.Constant) -> bool:
 def _dict_pairs_ok(value: ast.Dict, k_ann: ast.expr, v_ann: ast.expr) -> bool:
     for key, val in zip(value.keys, value.values):
         if key is None:
-            # ``**`` unpacking: if the unpacked value is a dict literal we
-            # can check its pairs recursively; otherwise trust it.
             if isinstance(val, ast.Dict) and not _dict_pairs_ok(val, k_ann, v_ann):
                 return False
             continue

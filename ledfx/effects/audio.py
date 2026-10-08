@@ -189,8 +189,6 @@ class AudioInputSource:
             )
             return
 
-        # Try to find the previously active device by name
-        # (device indices may have shifted after plug/unplug)
         with AudioInputSource._class_lock:
             last_device_name = AudioInputSource._last_device_name
             last_device_idx = AudioInputSource._last_active
@@ -454,9 +452,6 @@ class AudioInputSource:
         self.update_config(config)
 
         def shutdown_event(e):
-            # We give the rest of LedFx a second to shutdown before we deactivate the audio subsystem.
-            # This is to prevent LedFx hanging on shutdown if the audio subsystem is still running while
-            # effects are being unloaded. This is a bit hacky but it works.
             self._timer = threading.Timer(0.5, self.check_and_deactivate)
             self._timer.start()
 
@@ -506,11 +501,6 @@ class AudioInputSource:
             self._persist_config()
             return
 
-        # Device not found by name at all.
-        # For Sendspin virtual devices: do NOT fall back to a real audio device.
-        # Silently switching to a microphone/loopback when the user intended
-        # Sendspin is confusing and hard to diagnose.  Report the error and
-        # leave the config unchanged so the user can fix it.
         if saved_name.startswith("SENDSPIN:"):
             _LOGGER.warning(
                 "Sendspin audio device '%s' not found in current device list "
@@ -532,8 +522,6 @@ class AudioInputSource:
             )
             return
 
-        # For regular devices: reset to default so we don't silently open a
-        # different device that now occupies the stale index.
         default_idx = self.default_device_index()
         _LOGGER.warning(
             "Saved audio device '%s' not found in current device list. "
@@ -550,13 +538,6 @@ class AudioInputSource:
 
     def update_config(self, config):
         """Deactivate the audio, update the config, then reactivate"""
-        # Merge the incoming (possibly partial) update over the existing config
-        # before validation. Without this, a partial update such as
-        # {"delay_ms": N} re-validates a bare dict and the schema injects
-        # defaults for every absent key (audio_device -> the default device,
-        # audio_device_name -> ""), silently resetting the active device. The
-        # name-based restore below cannot recover it because the name has
-        # already been cleared.
         if hasattr(self, "_config"):
             config = {**self._config.model_dump(), **config}
         new_config = AudioConfig.model_validate(config, context=RUNTIME_CONTEXT)
@@ -632,8 +613,6 @@ class AudioInputSource:
                 _LOGGER.critical("Sounddevice error: %s. Shutting down.", Error)
                 self._ledfx.stop()
 
-        # Enumerate all of the input devices and find the one matching the
-        # configured host api and device name
         input_devices = self.query_devices()
 
         hostapis = self.query_hostapis()
@@ -802,9 +781,6 @@ class AudioInputSource:
                     device["max_input_channels"],
                 )
             else:
-                # if are not a windows loopback device, we will downmix to mono
-                # issue seen with poor audio behaviour on Mac and Linux
-                # this is similar to the long standing prior implementation
                 channels = 1
 
             if hostapis[device["hostapi"]]["name"] == "WEB AUDIO":
@@ -902,10 +878,6 @@ class AudioInputSource:
                         current_idx,
                     )
 
-        # Audio device startup sequence:
-        # PortAudio's internal state may be poisoned at startup
-        # (e.g. WDM-KS devices interfere during initial enumeration).
-        # Recovery: try configured → reinit + retry configured → reinit + fallback
         if try_open_device(device_idx):
             persist_device_name_if_needed()
             return
@@ -1020,15 +992,10 @@ class AudioInputSource:
             if device_name == value:
                 return key
 
-        # Fallback to partial match (device names can be truncated)
-        # Only match if the stored name is contained in the current device name
-        # (not the reverse, to avoid matching shorter names incorrectly)
         best_match_idx = -1
         best_match_len = 0
 
         for key, value in devices.items():
-            # Case 1: Stored name is substring of current device name
-            # This handles truncation where stored name is shorter
             if device_name in value and len(value) > best_match_len:
                 # Prefer longer matches to find the most specific device
                 best_match_idx = key
@@ -1047,8 +1014,6 @@ class AudioInputSource:
 
     def _audio_sample_callback(self, in_data, frame_count, time_info, status):
         """Callback for when a new audio sample is acquired"""
-        # time_start = time.time()
-        # self._raw_audio_sample = np.frombuffer(in_data, dtype=np.float32)
         raw_sample = np.frombuffer(in_data, dtype=np.float32)
 
         in_sample_len = len(raw_sample)
@@ -1089,9 +1054,6 @@ class AudioInputSource:
             self._invalidate_caches()
             self._invoke_callbacks()
 
-        # print(f"Core Audio Processing Latency {round(time.time()-time_start, 3)} s")
-        # return self._raw_audio_sample
-
     def _invoke_callbacks(self):
         """Notifies all clients of the new data"""
         for callback in self._callbacks:
@@ -1115,8 +1077,6 @@ class AudioInputSource:
         self._volume = max(0, min(1, self._volume))
         self._volume_filter.update(self._volume)
 
-        # Calculate the frequency domain from the filtered data and
-        # force all zeros when below the volume threshold
         volume = self._volume_filter.value
         if volume is not None and volume > self._config.min_volume:
             self._processed_audio_sample = self._raw_audio_sample
@@ -1147,8 +1107,6 @@ class AudioInputSource:
 
 
 class AudioAnalysisSource(AudioInputSource):
-    # some frequency constants
-    # beat, bass, mids, high
     freq_max_mels: ClassVar[list[int]] = [
         100,
         250,
@@ -1397,8 +1355,6 @@ class AudioAnalysisSource(AudioInputSource):
             value of
         beat grid pointer
         """
-        # update tempo and oscillator
-        # print(self._tempo.get_delay_s())
         if self.bpm_beat_now():
             self.beat_counter = (self.beat_counter + 1) % 4
             self.beat_period = self._tempo.get_period_s()
@@ -1436,8 +1392,6 @@ class AudioReactiveEffect(Effect):
     subclasses. This can be expanded to do the common r/g/b filters.
     """
 
-    # this can be used by inheriting classes for power func selection in schema
-    # see magnitude or scan effect for examples
     POWER_FUNCS_MAPPING: ClassVar[dict[str, str]] = {
         "Beat": "beat_power",
         "Bass": "bass_power",
@@ -1477,10 +1431,6 @@ class AudioReactiveEffect(Effect):
         super().deactivate()
 
     def create_filter(self, alpha_decay, alpha_rise):
-        # TODO: Since most effects reuse the same general filters it would be
-        # nice for all that computation to be shared. This mean that shared
-        # filters are needed, or if there is really just a small set of filters
-        # that those get added to the Melbank input source instead.
         return ExpFilter(alpha_decay=alpha_decay, alpha_rise=alpha_rise)
 
     def _audio_data_updated(self):
@@ -1583,10 +1533,6 @@ class AudioReactiveEffect(Effect):
         return (new, old)
 
     def melbank_no_nan(self, melbank):
-        # Check for NaN values in the melbank array, replace with 0 in place
-        # Difficult to determine why this happens, but it seems to be related to
-        # the audio input device.
-        # TODO: Investigate why NaNs are present in the melbank array for some people/devices
         if np.isnan(melbank).any():
             _LOGGER.warning(
                 "NaN values detected in the melbank array and replaced with 0."

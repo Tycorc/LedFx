@@ -26,30 +26,8 @@ FONT_MAPPINGS = {
 
 
 class Textblock:
-    # this class is intended to establish a pillow image object with rendered text within it
-    # text will be created from the passed font at the requested size
-    # the pillow image will have an alpha channel, and will always be transparent
-    # the text will be rendered in the color requested
-    # the text will be centered in the image which is only big enough to contain the text
-    # the Textblock instance will be merged into the main display image outside of this class
-    # so TextBlock has no idea of position which will be handled externally to this class
-
     def __init__(self, text, font, disp_size, color="white"):
-        """
-        Create a new Textblock object
-
-        Parameters
-        ----------
-        text : str
-            The text to render
-        font : ImageFont
-            The font to render the text in
-        disp_size : tuple
-            The size of the display, used to guestimate a reasonable point size
-            for the prerendered word blocks
-        color : str
-            The color of the text
-        """
+        """Create a new Textblock object"""
         self.text = text
         self.color = color
         self.ascent, self.descent = font.getmetrics()
@@ -63,37 +41,20 @@ class Textblock:
         self.h_width = self.width / (disp_size[1] / 2)
         self.h_height = self.height / (disp_size[1] / 2)
 
-        # word images are greyscale masks only
         self.image = Image.new("L", (self.width, self.height))  # , "grey")
         self.draw = ImageDraw.Draw(self.image)
         self.draw.text((0, 0), self.text, font=font, fill=color)
         self.pose = Pose(0, 0, 0, 1, 0, 1)
 
     def update(self, dt):
-        """
-        Update the Textblock object characteristics proportional to the time delta
-
-        Parameters
-        ----------
-        dt : float
-            Seconds time delta since the last update
-        """
+        """Advance the text block by dt seconds."""
 
         active = self.pose.update(dt)
         return active
 
     def calculate_final_size(self):
-        """
-        Calculate the final size of the rendered text block
-        Used to determine if the text block is off the display and can be clipped
+        """Return final (width, height) for off-screen clipping."""
 
-        Returns
-        -------
-        tuple
-            The final width and height of the rendered text block
-        """
-
-        # angle_rad = math.radians(self.pose.ang * 360)
         angle_rad = self.pose.ang * 2 * math.pi
 
         cos_angle = abs(math.cos(angle_rad))
@@ -108,25 +69,8 @@ class Textblock:
         return final_width, final_height
 
     def render(self, target, resize_method, color=None, values=None, values2=None):
-        """
-        Render the Textblock object to the target image
-
-        Parameters
-        ----------
-        target : Image
-            The target image to render the text block to
-        resize_method : int
-            The resampling method to use when resizing the text block
-        color : tuple
-            The color to render the text block in
-        values : list
-        values2: list
-            Diagnostic value lists that can be populated with values for debugging
-            TO BE REMOVED
-        """
+        """Render the Textblock object to the target image"""
         if self.pose.life > 0 and self.pose.alpha > 0.0 and self.pose.size > 0.0:
-            # pretty rambling calculation to get the rotated size of the image
-            # and clip it out if off the display
             pose_x = self.pose.x
             pose_y = self.pose.y
             c_width, c_height = self.calculate_final_size()
@@ -145,20 +89,9 @@ class Textblock:
                     ),
                     resample=resize_method,
                 )
-                # self.pos is a scalar for x and y in the range -1 to 1
-                # the pos position is for the center of the image
-                # here we will convert it to a pixel position within target which is a PIL image object
 
-                # biased rounding is an accepted technique to bump values off
-                # the rounding cusp and to avoid unwanted glitches visible to
-                # the end user this prevents text jumping up a line
-                # unexpoectedly it does just move the issue, but FAR less likely
-                # to express
                 x = biased_round(((pose_x + 1) * half_width) - (resized.width / 2))
                 y = biased_round(((pose_y + 1) * half_height) - (resized.height / 2))
-
-                # _LOGGER.info(
-                #     "Textblock %s x: %s y: %s %s %s ang: %s size: %s", self.text, self.pose.x, self.pose.y, x, y, self.pose.ang, self.pose.size)
 
                 capped_alpha = min(1.0, max(0.0, self.pose.alpha))
                 if capped_alpha < 1.0:
@@ -176,30 +109,8 @@ class Textblock:
 
 
 class Sentence:
-    # this class will construct and maintain a set of words,
-    # spaces and animated dynamics for a sentence
-
-    # TODO: Sentence render needs to be able to render in order from the focused
-    # word backwards. Do this via walking outwards from the focus index to avoid
-    # sorting costs
-    # Focus word should be placed vertically according to slider
-
     def __init__(self, text, font_name, points, disp_size):
-        """
-        Create a new Sentence object
-
-        Parameters
-        ----------
-        text : str
-            The text from which to construct the sentence object
-        font_name : str
-            The name of the font to use
-        points : int
-            The point size of the font
-        disp_size : tuple
-            The size of the display, used to guestimate a reasonable point size
-            for the prerendered word blocks
-        """
+        """Create a new Sentence object"""
         self.text = text
         self.font_path = FONT_MAPPINGS[font_name]
         self.points = points
@@ -224,24 +135,11 @@ class Sentence:
         self.word_focus_callback = None
 
     def update(self, dt):
-        """
-        Update the Sentence object characteristics proportional to the time delta
-
-        Parameters
-        ----------
-        dt : float
-            Seconds time delta since the last update
-        """
+        """Advance the sentence by dt seconds."""
 
         if self.word_focus_active:
-            # allow this to go out of range for theshold testing elsewhere
-            # clip at point of application
             self.word_focus += self.d_word_focus * dt
-            # TODO: where should this callback be called?
-            # at word or sentence level, what should we allow it to do?
-            # update or render level?
             if self.word_focus >= 1.0:
-                # move onto next word and restart counters
                 self.word_focused_on = (self.word_focused_on + 1) % self.wordcount
                 self.word_focus %= 1.0
 
@@ -249,25 +147,8 @@ class Sentence:
             word.update(dt)
 
     def render(self, target, resize_method, color, values=None, values2=None):
-        """
-        Render the Sentence object to the target image
-
-        Parameters
-        ----------
-        target : Image
-            The target image to render the sentence to
-        resize_method : int
-            The resampling method to use when resizing the text block
-        color : list
-            The colors to render the text blocks in
-        values : list
-        values2: list
-            Diagnostic value lists that can be populated with values for debugging
-            TO BE REMOVED
-        """
+        """Render the Sentence object to the target image"""
         color_len = len(color)
-
-        # TODO: allow focus color override
 
         for i, word in enumerate(self.wordblocks):
             if self.word_focus_active and i == self.word_focused_on:
@@ -281,7 +162,6 @@ class Sentence:
                     values2,
                 )
 
-        # draw the focus word last
         if self.word_focus_active:
             self.wordblocks[self.word_focused_on].render(
                 target,

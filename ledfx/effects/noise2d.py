@@ -144,11 +144,6 @@ class Noise2d(Twod, GradientEffect):
         y_array = np.linspace(noise_y, noise_y + scale_y * self.r_width, self.r_width)
         z_array = np.array([self.noise_z])  # noqa: F841
 
-        ###################################################################################
-        # This is where the magic happens, calling the lib to get the noise plane
-        ###################################################################################
-        # FastNoiseLite uses gen_from_coords for vectorized generation
-        # Create meshgrid for 2D coordinates
         x_grid, y_grid = np.meshgrid(y_array, x_array, indexing="xy")
         # Flatten coordinates - gen_from_coords expects shape (3, N) not (N, 3)
         x_flat = x_grid.flatten()

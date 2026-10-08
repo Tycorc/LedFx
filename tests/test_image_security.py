@@ -512,36 +512,6 @@ class TestExtensionlessRemoteURLs:
 
 
 # Test Scenarios Documentation
-"""
-GOOD SCENARIOS (Should Pass):
-1. Valid PNG/JPEG/GIF/WEBP/BMP files with correct extensions
-2. Files under 10MB in size
-3. Images with dimensions <= 4096x4096 pixels
-4. Remote URLs with correct Content-Length headers
-5. Files with correct MIME types matching their content
-6. URLs pointing to public IP addresses
-7. URLs with query strings and fragments
-8. Remote URLs (http/https) without file extensions (validated via Content-Type header)
-
-BAD SCENARIOS (Should Fail):
-1. Files with disallowed extensions (.txt, .pdf, .exe, etc.)
-2. Text files with spoofed image extensions
-3. Files exceeding 10MB size limit
-4. Images exceeding 4096x4096 pixel dimensions
-5. Remote downloads without Content-Length or exceeding size during read
-6. Files with incorrect MIME types
-7. Images with unsupported PIL formats
-8. Nonexistent files
-9. Remote URLs with explicitly invalid extensions (.txt, .pdf, etc.)
-10. Local files without extensions or with invalid extensions
-11. URLs pointing to loopback addresses (127.0.0.0/8, ::1)
-12. URLs pointing to private networks (10/8, 172.16/12, 192.168/16, fc00::/7)
-13. URLs pointing to link-local addresses (169.254/16, fe80::/10)
-14. URLs pointing to cloud metadata endpoints (169.254.169.254)
-15. URLs using non-HTTP/HTTPS protocols in remote requests (validated by validate_url_safety)
-16. Hostnames that resolve to blocked IP addresses
-17. Non-HTTP/HTTPS URL schemes in local file path handling (file://, ftp://, data:, javascript:, etc.)
-"""
 
 
 class TestPathTraversalNaughtyStrings:

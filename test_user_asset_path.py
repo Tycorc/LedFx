@@ -17,11 +17,9 @@ def create_test_gif(path):
 def test_user_asset_path():
     """Test that plain paths resolve to config_dir/assets/"""
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Create assets directory
         assets_dir = os.path.join(tmpdir, "assets")
         os.makedirs(assets_dir)
 
-        # Create test GIF in assets directory
         test_gif_path = os.path.join(assets_dir, "test.gif")
         create_test_gif(test_gif_path)
 

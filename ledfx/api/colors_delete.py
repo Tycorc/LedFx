@@ -21,7 +21,6 @@ class ColorDeleteEndpoint(RestEndpoint):
         Returns:
             web.Response: The HTTP response object.
         """
-        # Try to delete from colors first
         if color_id in self._ledfx.colors:
             try:
                 del self._ledfx.colors[color_id]
@@ -33,7 +32,6 @@ class ColorDeleteEndpoint(RestEndpoint):
                 _LOGGER.warning(error_message)
                 return await self.invalid_request(error_message)
 
-        # Try to delete from gradients
         if color_id in self._ledfx.gradients:
             try:
                 del self._ledfx.gradients[color_id]
@@ -45,7 +43,6 @@ class ColorDeleteEndpoint(RestEndpoint):
                 _LOGGER.warning(error_message)
                 return await self.invalid_request(error_message)
 
-        # Color/gradient not found
         error_message = f"Color or gradient {color_id} not found"
         _LOGGER.warning(error_message)
         return await self.invalid_request(error_message)

@@ -19,7 +19,6 @@ def scene_action(virtual_config: SceneVirtual) -> str:
     """The scene action, inferring legacy entries (no action field)."""
     if virtual_config.action is not None:
         return virtual_config.action
-    # Empty entry, or neither type nor config: ignore (legacy behaviour).
     if virtual_config.type is None and virtual_config.config is None:
         return "ignore"
     return "activate"
@@ -33,11 +32,8 @@ def is_empty(virtual_config: SceneVirtual) -> bool:
 class Scenes:
     """Scenes manager"""
 
-    # Interfaces directly with config - no real need to create Scene objects.
-
     def __init__(self, ledfx):
         self._ledfx = ledfx
-        # Delayed activations from activate_in, by scene id.
         self._pending: dict[str, asyncio.TimerHandle] = {}
 
     @property
@@ -56,7 +52,6 @@ class Scenes:
         self._ledfx.config_store.request_save()
 
     def create_from_config(self, config):
-        # maybe use this to sanitise scenes on startup or smth
         pass
 
     def create(self, scene_config, scene_id=None):
@@ -73,7 +68,6 @@ class Scenes:
         scene = Scene.model_validate({**scene_config, "virtuals": virtual_effects})
         scene_id = scene_id if scene_id in self._scenes else generate_id(scene.name)
 
-        # Update the scene if it already exists, else create it
         self._scenes[scene_id] = scene
         self.save_to_config()
 
@@ -164,8 +158,6 @@ class Scenes:
                 raise Invalid(f"Unknown effect type: {effect_type}")
 
             if virtual_config.preset:
-                # Resolve preset from current library for this effect type
-                # (will fall back to reset preset if not found)
                 effect_config = self._resolve_preset(effect_type, virtual_config.preset)
             else:
                 effect_config = virtual_config.config
@@ -336,9 +328,6 @@ class Scenes:
 
                 current_config = getattr(current_effect, "config", None) or {}
 
-                # Normalize the expected config by filling in defaults for missing keys
-                # This ensures legacy scenes (with fewer keys) match current effects (with new keys)
-                # The current config doesn't need normalization as it's the running effect with all keys
                 default_config = generate_default_config(
                     self._ledfx.effects, expected_type
                 )
@@ -346,9 +335,6 @@ class Scenes:
 
                 if not configs_match(current_config, normalized_expected):
                     return False
-
-            # Unknown actions are skipped during activation, so they don't affect active state
-            # (treat as "ignore")
 
         return True
 

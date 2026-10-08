@@ -222,7 +222,6 @@ class DeviceUpdateEvent(Event):
     def __init__(self, device_id: str, pixels: np.ndarray):
         super().__init__(Event.DEVICE_UPDATE)
         self.device_id = device_id
-        # self.pixels = pixels.astype(np.uint8).T.tolist()
         self.pixels = pixels
 
 
@@ -429,9 +428,7 @@ class PlaylistStartedEvent(Event):
         self.playlist_id = playlist_id
         self.index = index
         self.scene_id = scene_id
-        # Duration after jitter/clamping applied for the current item
         self.effective_duration_ms = effective_duration_ms
-        # Remaining ms when paused/cancelled (if available)
         self.remaining_ms = remaining_ms
 
 
@@ -666,10 +663,3 @@ class Events:
                 self._listeners.pop(event_type)
         except (KeyError, ValueError):
             _LOGGER.warning("Failed to remove event listener %s", listener)
-
-
-# def get_event_types():
-#     """Get a list of the types of events available"""
-#     return [event for event in vars(Event) if (not event.startswith('__')) and (event.isupper())]
-
-# print(get_event_types())

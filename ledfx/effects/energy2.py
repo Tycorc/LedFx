@@ -51,10 +51,3 @@ class Energy2(AudioReactiveEffect, HSVEffect):
 
         # # "Pixel expression"
         # for i in range(self.pixel_count):
-
-        #     v = self.triangle(
-        #         (2.0 * self.sin(t1) + i / self.pixel_count) % 1.0
-        #     )
-        #     v **= 5.0
-        #     s = v < 0.9
-        #     self.hsv_array[i] = (self._lows_power, s, v)

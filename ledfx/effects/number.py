@@ -275,16 +275,3 @@ class Number(Texter2d):
             )
             self.side_scroll_init()
         super().draw()
-
-
-# Example of how to use this effect with custom values:
-#
-# To display a custom diagnostic value:
-# 1. Get a reference to the effect instance
-# 2. Set effect.display_value to your diagnostic value
-# 3. The value will be displayed on the next render frame
-#
-# Example:
-#   effect = virtual.active_effect
-#   if isinstance(effect, Number):
-#       effect.display_value = my_diagnostic_value

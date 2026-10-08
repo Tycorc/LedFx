@@ -31,7 +31,6 @@ _LOGGER = logging.getLogger(__name__)
 MAX_PENDING_MESSAGES = 256
 MAX_VAL = 32767
 
-# Phase 2: Client metadata constants
 VALID_CLIENT_TYPES = [
     "controller",
     "visualiser",
@@ -42,7 +41,6 @@ VALID_CLIENT_TYPES = [
     "unknown",
 ]
 
-# Phase 3: Broadcasting constants and message models
 BroadcastType = Literal["visualiser_control", "scene_sync", "color_palette", "custom"]
 TargetMode = Literal["all", "type", "names", "uuids"]
 BROADCAST_TYPES: list[str] = list(get_args(BroadcastType))
@@ -77,17 +75,11 @@ class BroadcastData(BaseModel):
     payload: dict[str, object]
 
 
-# Not all events are able to be subscribed to by the websocket
-# This dict show the events that are not subscribable and what event should be used instead
 NON_SUBSCRIBABLE_EVENTS = {
     "device_update": "visualisation_update",
     "virtual_update": "visualisation_update",
 }
 
-# TODO: Have a more well defined registration and a more componetized solution.
-# Could do something like have Device actually provide the handler for Device
-# related functionality. This would allow easy access to internal workings and
-# events.
 websocket_handlers = {}
 
 
@@ -117,7 +109,6 @@ class WebsocketEndpoint(RestEndpoint):
 class WebsocketConnection:
     ip_uid_map: ClassVar[dict[str, str]] = {}
     map_lock = asyncio.Lock()
-    # Phase 1: Class-level metadata storage
     client_metadata: ClassVar[
         dict[str, dict[str, object]]
     ] = {}  # UUID -> metadata dict
@@ -129,14 +120,11 @@ class WebsocketConnection:
         self._listeners = {}
         self._receiver_task = None
         self._sender_task = None
-        # Dual-path sender: control queue for reliable ordered messages,
-        # single-slot mailbox dict for latest-value-wins vis frames.
         self._control_queue = asyncio.Queue(maxsize=MAX_PENDING_MESSAGES)
         self._vis_slots = {}  # vis_id -> latest message (overwrites old)
         self._has_work = asyncio.Event()
         self.client_ip = None
         self.uid = None
-        # Phase 1: Instance attributes for client metadata
         self.device_id = None
         self.client_name = None
         self.client_type = "unknown"
@@ -851,13 +839,6 @@ class WebsocketConnection:
 
     @websocket_handler("audio_stream_data")
     def audio_stream_data_handler(self, message):
-        # _LOGGER.info(
-        #     "Websocket: {} incoming from {} with type {}".format(
-        #         message.get("event_type"),
-        #         message.get("client"),
-        #         type(message.get("data")),
-        #     )
-        # )
 
         if not ACTIVE_AUDIO_STREAM:
             return
@@ -902,8 +883,6 @@ class WebsocketConnection:
         else:
             fmt = f"<{len(decoded) // 2}h"
             data = list(struct.unpack(fmt, decoded))
-            # Minimum value is -32768 for signed, so that's why if the number is negative,
-            # it is divided by 32768 when converting to float.
             data = np.array(
                 [d / MAX_VAL if d >= 0 else d / (MAX_VAL + 1) for d in data],
                 dtype=np.float32,
@@ -970,9 +949,6 @@ class WebsocketConnection:
 
             if msg_type == self._BINARY_MSG_FRONTEND_VIS:
                 self._handle_frontend_vis(data)
-            # Add additional binary message type handlers here following
-            # the same pattern: elif msg_type == self._BINARY_MSG_XXX:
-            #     self._handle_xxx(data)
             else:
                 _LOGGER.warning(
                     "Unknown binary message type 0x%02x from %s",

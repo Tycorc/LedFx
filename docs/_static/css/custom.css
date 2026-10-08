@@ -1,7 +1,6 @@
 @import '_build/html/_static/css/theme.css';
 
 .rst-content pre.literal-block, .rst-content div[class^='highlight'] pre, .rst-content .linenodiv pre {
-    /*color of code blocks*/
     background-color: #EEEEEE
 }
 

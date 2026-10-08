@@ -16,30 +16,14 @@ class ClientEndpoint(RestEndpoint):
     ENDPOINT_PATH = "/api/clients"
 
     async def get(self) -> web.Response:
-        """
-        Get the list of connected clients with metadata
+        """Get the list of connected clients with metadata"""
 
-        Returns:
-            web.Response: Dictionary of client UUIDs to metadata objects
-                Format: { "uuid": { "name": "...", "type": "...", "ip": "...", ... }, ... }
-        """
-
-        # Breaking change: Always return full metadata objects
         clients = await WebsocketConnection.get_all_clients_metadata()
 
         return await self.bare_request_success(clients)
 
     async def post(self, request: web.Request) -> web.Response:
-        """
-        Perform action for client
-
-        "action":
-            "sync": Trigger sync_event broadcast to all subscribed clients
-            Caller should provide a "client_id" attribute to identify the source client
-
-        Returns:
-            web.Response: The response indicating success or failure
-        """
+        """Perform action for client"""
 
         try:
             data = await request.json()

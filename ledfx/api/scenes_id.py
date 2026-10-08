@@ -15,15 +15,7 @@ class SceneEndpoint(RestEndpoint):
     ENDPOINT_PATH = "/api/scenes/{scene_id}"
 
     async def get(self, scene_id) -> web.Response:
-        """
-        Get a single scene by ID.
-
-        Args:
-            scene_id (str): The scene ID from the URL path.
-
-        Returns:
-            web.Response: The response containing the scene.
-        """
+        """Get a single scene by ID."""
         scene_id = generate_id(scene_id)
 
         if scene_id not in self._ledfx.config.scenes:
@@ -42,25 +34,15 @@ class SceneEndpoint(RestEndpoint):
         return await self.bare_request_success(response)
 
     async def delete(self, scene_id) -> web.Response:
-        """
-        Delete a scene by ID (RESTful endpoint).
-
-        Args:
-            scene_id (str): The scene ID from the URL path.
-
-        Returns:
-            web.Response: The response indicating success or failure.
-        """
+        """Delete a scene by ID (RESTful endpoint)."""
         scene_id = generate_id(scene_id)
 
         if scene_id not in self._ledfx.config.scenes:
             return await self.invalid_request("Scene not found")
 
-        # Delete the scene from configuration
         self._ledfx.scenes.cancel_pending(scene_id)
         del self._ledfx.config.scenes[scene_id]
 
-        # Save the config
         self._ledfx.config_store.request_save()
 
         return await self.request_success(

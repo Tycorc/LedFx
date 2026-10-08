@@ -18,9 +18,6 @@ class PluginConfig(LedFxModel):
     @classmethod
     @override
     def __pydantic_init_subclass__(cls, **kwargs: object) -> None:
-        # voluptuous Schema.extend semantics: a redeclared key moves to the
-        # subclass position (pydantic would keep the parent's slot). Field order
-        # is user-visible in /api/schema and the frontend forms.
         super().__pydantic_init_subclass__(**kwargs)
         own = [n for n in inspect.get_annotations(cls) if n in cls.__pydantic_fields__]
         inherited = {n: f for n, f in cls.__pydantic_fields__.items() if n not in own}

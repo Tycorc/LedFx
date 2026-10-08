@@ -5,11 +5,7 @@ import numpy as np
 
 
 class Oneshot(ABC):
-    """
-    Base class for all oneshot types.
-
-    Oneshot is an effect that is triggered manually (through, for example, REST API).
-    """
+    """A manually triggered effect."""
 
     def __init__(self):
         self._active: bool = True
@@ -46,18 +42,7 @@ class Oneshot(ABC):
 
 class Flash(Oneshot):
     def __init__(self, color, ramp, hold, fade, brightness):
-        """
-        Force all pixels in virtual to color over a time envelope defined in ms.
-
-        Parameters:
-            color of the flash
-            ramp time from in ms
-            hold time in ms
-            fade time in ms
-            brightness of the flash
-        Returns:
-            True if oneshot was activated, False if not
-        """
+        """Force a color over ramp, hold and fade intervals measured in milliseconds."""
         super().__init__()
         self._color = np.array(color, dtype=float) * brightness
         self._ramp = ramp / 1000.0

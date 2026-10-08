@@ -9,8 +9,6 @@ from ledfx.effects.audio import AudioInputSource
 
 _LOGGER = logging.getLogger(__name__)
 
-""" Work In Progress """
-
 
 class AudioDevicesEndpoint(RestEndpoint):
     ENDPOINT_PATH = "/api/audio/devices"
@@ -18,12 +16,7 @@ class AudioDevicesEndpoint(RestEndpoint):
     _audio = None
 
     async def get(self) -> web.Response:
-        """
-        Get list of audio devices using sound device
-
-        Returns:
-            web.Response: The response containing the list of audio devices and the active device index.
-        """
+        """Return available inputs and the active device index/name."""
         audio_config = validate_dict(
             AudioInputConfig, self._ledfx.config.audio.model_dump(), runtime=True
         )
@@ -37,16 +30,7 @@ class AudioDevicesEndpoint(RestEndpoint):
         return await self.bare_request_success(response)
 
     async def put(self, request: web.Request) -> web.Response:
-        """
-        Set audio device to use as input.
-
-        Args:
-            request (web.Request): The request object containing the new device `index`.
-
-        Returns:
-            web.Response: The HTTP response object.
-
-        """
+        """Select the requested audio_device index and persist it."""
         try:
             data = await request.json()
         except JSONDecodeError:
@@ -63,11 +47,6 @@ class AudioDevicesEndpoint(RestEndpoint):
         if isinstance(index, bool) or index not in valid_indexes:
             return await self.invalid_request(f"Invalid device index [{index}]")
 
-        # Update and save config
-        # When user explicitly selects a new device via API, replace any stale
-        # stored name with the current name for that selected index. This keeps
-        # the live selection consistent now and preserves boot-time name-based
-        # recovery if indices drift before the next restart.
         cfg = self._ledfx.config
         cfg.audio = cfg.audio.model_copy(
             update={

@@ -16,25 +16,13 @@ from ledfx.effects.twod import Twod
 
 _LOGGER = logging.getLogger(__name__)
 
-# ---- Tunables ---------------------------------------------------------------
-# Capacity policy for particle storage:
-#   - AUTO_GROW=False: fixed-cap per group; extra spawns are dropped (fast, predictable)
-#   - AUTO_GROW=True : capacity grows geometrically when needed (no drops)
 AUTO_GROW = False
-# Initial particle capacity per group (used as hard cap when AUTO_GROW=False)
 INIT_CAP = 4096
-# Rows to preallocate for HSV->RGB scratch buffer (r_width * this factor)
 RGB_SCRATCH_FACTOR = 16
-# Resolution-aware spawn scaling. 64x64 is the baseline:
-#   DENSITY_EXPONENT = 0.0 -> no scaling (original behavior)
-#   DENSITY_EXPONENT = 1.0 -> linear with height (per-pixel-ish density)
 DENSITY_EXPONENT = 0.5
-# Top-edge randomisation: particles get a personal cutoff up to this fraction of height.
-# This breaks the perfectly flat top edge without extra allocations.
 TOP_TRIM_FRAC = 0.40
 INV_TWOPI = 1.0 / (2.0 * np.pi)
 
-# Particle dynamics / visuals
 MIN_VELOCITY_OFFSET = 0.5
 MAX_VELOCITY_OFFSET = 1.2
 MIN_LIFESPAN = 2.0
@@ -42,7 +30,6 @@ MAX_LIFESPAN = 4.0
 WOBBLE_RATIO = 0.05
 SPAWN_MODIFIER = 4.0
 
-# Structure-of-Arrays for particle groups
 ParticleGroup = namedtuple(
     "ParticleGroup",
     ["x", "y", "age", "lifespan", "velocity_y", "size", "wobble_phase"],
@@ -72,7 +59,6 @@ class Flame2d(Twod):
 
     NAME = "Flame"
     CATEGORY = "Matrix"
-    # alpha mixing of background color with flame does not work well, just hide it
     HIDDEN_KEYS = Twod.HIDDEN_KEYS + [
         "test",
         "background_color",
@@ -106,24 +92,19 @@ class Flame2d(Twod):
         """
         super().__init__(ledfx, config)
 
-        # Particle storage (allocated in do_once)
         self.particles = None  # dict[str, ParticleGroup]
         self._counts = {"low": 0, "mid": 0, "high": 0}
         self._caps = {"low": 0, "mid": 0, "high": 0}
 
-        # Audio powers (low/mid/high)
         self.audio_pow = np.zeros(3, dtype=np.float32)
 
-        # Per-group fractional spawn accumulators
         self.spawn_accumulator = np.zeros(3, dtype=np.float32)
 
-        # Perf helpers
         self._rng = np.random.default_rng()
         self._rgb_scratch = None  # preallocated (N,3) float32 buffer
         self._offsets = np.arange(-3, 4, dtype=np.int32)  # scatter kernel [-3..3]
         self._abs_offsets = np.abs(self._offsets)
 
-        # Blur scratch buffers (allocated on-demand)
         self._blur_padded = None
         self._blur_cumsum = None
 
@@ -184,7 +165,6 @@ class Flame2d(Twod):
         old = self.particles[group]
         new = self._empty_cap(new_cap)
         n = self._counts[group]
-        # Copy live front segment
         for f in ParticleGroup._fields:
             getattr(new, f)[:n] = getattr(old, f)[:n]
         self.particles[group] = new
@@ -197,27 +177,21 @@ class Flame2d(Twod):
         """
         super().do_once()
 
-        # Render target (float32 until final clip/cast)
         self.r_pixels = np.zeros((self.r_height, self.r_width, 3), dtype=np.float32)
 
-        # Particle capacity
         self._ensure_group_caps(INIT_CAP)
 
-        # Audio wobble amplitude scales with width
         self.wobble_amplitude = max(1.0, WOBBLE_RATIO * self.r_width)
 
-        # Base colors converted to HSV once (float32 0..1)
         self.color_hsv_values = [
             rgb_to_hsv_vect(self.low_color),
             rgb_to_hsv_vect(self.mid_color),
             rgb_to_hsv_vect(self.high_color),
         ]
 
-        # Preallocate HSV->RGB scratch buffer; chunking uses this cap
         max_particles_guess = max(1024, self.r_width * RGB_SCRATCH_FACTOR)
         self._rgb_scratch = np.empty((max_particles_guess, 3), dtype=np.float32)
 
-        # Prepare blur scratch if needed
         self._ensure_blur_buffers()
 
     def _ensure_blur_buffers(self) -> None:
@@ -269,7 +243,6 @@ class Flame2d(Twod):
         if not np.any(alive):
             return 0
         k = int(alive.sum())
-        # Stable compaction of all fields
         for f in ParticleGroup._fields:
             arr = getattr(p, f)
             arr[:k] = arr[:n][alive]
@@ -303,9 +276,6 @@ class Flame2d(Twod):
         for index, (group_name, power, (h_base, s_base, v_base)) in enumerate(
             zip(("low", "mid", "high"), self.audio_pow, self.color_hsv_values)
         ):
-            # Fast path: if base color is black, skip update/spawn/render entirely.
-            # NOTE: This will "pause" that group's particles; they will resume
-            #       motion/rendering if the color becomes non-black later.
             if v_base == 0.0:
                 continue
 
@@ -322,9 +292,6 @@ class Flame2d(Twod):
                 new_age = age + delta
                 new_y = y - (H / vy) * delta
 
-                # Per-particle cutoff height derived from wobble_phase:
-                # wobble_phase ∈ [0, 2π) -> uniform [0,1) via *INV_TWOPI,
-                # scaled by (H * TOP_TRIM_FRAC) -> cutoff in pixels.
                 cutoff = p.wobble_phase[:n] * INV_TWOPI * (H * TOP_TRIM_FRAC)
 
                 alive = (new_age < life) & (new_y >= cutoff)

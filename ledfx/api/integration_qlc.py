@@ -36,7 +36,6 @@ class QLCEndpoint(RestEndpoint):
 
         response = {}
 
-        # generate dict of {effect_id: effect_name}
         effect_names = []
         for effect in self._ledfx.effects.classes().values():
             effect_names.append(effect.NAME)
@@ -106,13 +105,11 @@ class QLCEndpoint(RestEndpoint):
                 f'Invalid filter "{event_filter}", should be dictionary eg. {{ "scene_id" : "my scene" }} '
             )
 
-        # toggle the event listener
         if not integration.toggle_event(event_type, event_filter):
             return await self.invalid_request(
                 f"Could not find event with type {event_type} and filter {event_filter}"
             )
 
-        # Save the configuration (integration will handle modifying "data")
         for _integration in self._ledfx.config.integrations:
             if _integration.id == integration_id:
                 _integration.data = integration.data
@@ -161,7 +158,6 @@ class QLCEndpoint(RestEndpoint):
                 f'Invalid filter "{event_filter}", should be dictionary eg. {{ "scene_id" : "my scene" }} '
             )
 
-        # Create a link between ledfx event and sending the payload
         integration.create_event(event_type, event_filter, True, qlc_payload)
 
         # Update and save the configuration

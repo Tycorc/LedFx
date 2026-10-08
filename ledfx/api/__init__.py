@@ -37,7 +37,6 @@ class RestEndpoint(BaseRegistry):
         )
         body = None
         body_is_json = False
-        # Skip body parsing for multipart requests - they need to use request.multipart()
         content_type = request.headers.get("Content-Type", "")
         if request.has_body and not content_type.startswith("multipart/"):
             try:
@@ -101,7 +100,6 @@ class RestEndpoint(BaseRegistry):
         except web.HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
-            # _LOGGER.exception(e)
             reason = getattr(e, "args", None)
             if reason:
                 reason = str(reason[0])

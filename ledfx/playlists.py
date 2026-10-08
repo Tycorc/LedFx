@@ -35,9 +35,6 @@ class PlaylistManager:
 
         # runtime state
         self._active_playlist_id: str | None = None
-        # _active_index represents the position within the concrete play order
-        # (i.e. the index into self._order). The actual item index in the
-        # playlist's items array is self._order[self._active_index].
         self._active_index: int = 0
         # Concrete per-cycle order (permutation of 0..N-1) used when mode == "shuffle"
         self._order: list[int] = []
@@ -60,8 +57,6 @@ class PlaylistManager:
         # runtime-resolved items list (for dynamic "all scenes" playlists with empty items)
         self._runtime_items: list | None = None
 
-        # load playlists from config (validate)
-        # (already validated: the store quarantines invalid playlists on load)
         self._playlists: dict[str, dict] = {
             pid: p.model_dump() for pid, p in core.config.playlists.items()
         }
@@ -97,14 +92,10 @@ class PlaylistManager:
             self._order = []
             return
 
-        # Determine which mode to use: caller-provided desired_mode wins,
-        # otherwise fall back to the runtime/configured effective mode.
         effective_mode = (
             desired_mode if desired_mode is not None else self._effective_mode(playlist)
         )
 
-        # Regenerate when we don't have an order, when length changed, or
-        # when a caller explicitly requested a specific mode.
         if (
             not self._order
             or len(self._order) != len(items)
@@ -177,8 +168,6 @@ class PlaylistManager:
         return copy.deepcopy(self._playlists.get(pid))
 
     async def create_or_replace(self, playlist: dict) -> dict:
-        # If caller omitted an id, generate one from the provided name and
-        # ensure it's unique within current playlists.
         p = dict(playlist)  # work on a shallow copy
         if not p.get("id"):
             if not p.get("name") or not isinstance(p["name"], str):
@@ -346,9 +335,6 @@ class PlaylistManager:
                             )
                             self._active_index = 0
                 finally:
-                    # Clear per-item runtime markers after the item finishes.
-                    # If we set _remaining_ms because of cancellation (pause), keep
-                    # the sampled _item_effective_duration_ms so resume can reuse it.
                     self._item_start_ts = None
                     if self._remaining_ms is None:
                         # item truly finished normally; clear sampled duration
@@ -376,9 +362,6 @@ class PlaylistManager:
         playlist = self._playlists[pid]
         items = playlist.get("items", [])
 
-        # Dynamic "all scenes" resolution: if items list is empty, populate
-        # with all current scene IDs. This happens at start time so the playlist
-        # always includes the latest scenes.
         if not items:
             # Access scenes from config since Scenes class stores them there
             if hasattr(self._core, "config"):
@@ -408,12 +391,6 @@ class PlaylistManager:
         self._active_playlist_id = pid
         self._active_index = 0
 
-        # initialize concrete order per playlist mode (respect runtime override)
-        # Determine the intended mode for this start call. If the caller
-        # provided an explicit runtime override, use that. Otherwise use
-        # the playlist's configured mode. Passing this as desired_mode
-        # guarantees we generate an order matching the intended mode and
-        # won't reuse a stale order from a previous session.
         intended_mode = (
             self._mode_override
             if self._mode_override is not None

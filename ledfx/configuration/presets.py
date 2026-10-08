@@ -15,17 +15,7 @@ UI_ONLY_KEYS_IGNORED_FOR_CONFIG_COMPARISON = [
 
 
 def filter_config_for_comparison(config: object) -> dict[str, object]:
-    """Filter out UI-only keys from effect configuration for comparison.
-
-    Removes keys like 'advanced' and 'diag' that are UI-only and don't
-    affect the actual effect behavior.
-
-    Args:
-        config (dict): The configuration dictionary to filter.
-
-    Returns:
-        dict: A new dictionary with UI-only keys removed.
-    """
+    """Filter out UI-only keys from effect configuration for comparison."""
     if isinstance(config, PluginConfig):
         config = config.as_dict()  # a running effect's config
     if not isinstance(config, dict):
@@ -38,15 +28,7 @@ def filter_config_for_comparison(config: object) -> dict[str, object]:
 
 
 def configs_match(config1: object, config2: object) -> bool:
-    """Compare two effect configurations, ignoring UI-only keys.
-
-    Args:
-        config1 (dict): First configuration to compare.
-        config2 (dict): Second configuration to compare.
-
-    Returns:
-        bool: True if configurations match (ignoring UI-only keys), False otherwise.
-    """
+    """Compare two effect configurations, ignoring UI-only keys."""
     return filter_config_for_comparison(config1) == filter_config_for_comparison(
         config2
     )
@@ -59,34 +41,16 @@ def find_matching_preset(
     effect_type: str,
     effect_config: object,
 ) -> tuple[str, str] | tuple[None, None]:
-    """Find a matching preset for the given effect configuration.
-
-    Searches through both system (ledfx) and user presets to find a preset
-    that matches the given effect configuration. Ignores UI-only keys like
-    'advanced' and 'diag' during comparison.
-
-    Args:
-        ledfx_presets (dict): The system presets configuration.
-        user_presets (dict): The user presets configuration.
-        ledfx_effects (dict): The effects registry.
-        effect_type (str): The type of effect to match.
-        effect_config (dict): The effect configuration to match against presets.
-
-    Returns:
-        tuple: (preset_id, category) if a match is found, otherwise (None, None).
-            category will be either 'ledfx_presets' or 'user_presets'.
-    """
+    """Return (preset_id, category), or (None, None), ignoring UI-only keys."""
     if not isinstance(effect_config, dict):
         return None, None
 
-    # Check ledfx_presets first
     ledfx_defaults = generate_defaults(ledfx_presets, ledfx_effects, effect_type)
     for preset_id, preset_data in ledfx_defaults.items():
         preset_config = preset_data.get("config")  # absent: compares as {}
         if configs_match(preset_config, effect_config):
             return preset_id, "ledfx_presets"
 
-    # Check user_presets (config.user_presets: Preset models)
     if effect_type in user_presets:
         for preset_id, preset_data in user_presets[effect_type].items():
             if configs_match(preset_data.config, effect_config):

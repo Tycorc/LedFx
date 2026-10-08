@@ -12,7 +12,7 @@ LedFx makes your LEDs dance to audio!
 What LedFx offers is the ability to take audio input, and instantaneously processes the audio into realtime light show to multiple LED strips/matrix.
 No need to spend hours on end to program one song to program your LEDs, as LedFx will do this all for you!
 
-LedFx real-time LED strip music visualization effect controller using is a network based devices (ESP8266/ESP32/Raspberry Pi 4) with support for advanced real-time audio effects! LedFx can control multiple devices and works great with cheap ESP8266/ESP32 nodes allowing for cost effective synchronized effects across your entire house!
+LedFx is a real-time music visualization controller for networked LED devices (ESP8266, ESP32, and Raspberry Pi). LedFx can control multiple devices and works great with cheap ESP8266/ESP32 nodes allowing for cost effective synchronized effects across your entire house!
 
 Ledfx comes with a browser based front end for configuration, control and live visualisation on port 8888 by default.
 
@@ -150,3 +150,13 @@ License
    :alt: Discord
 .. |Contributor Covenant| image:: https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg
    :target: CODE_OF_CONDUCT.md
+
+Development from this checkout
+------------------------------
+Use Python 3.11–3.14 and the uv version required by ``pyproject.toml``::
+
+    uv sync --group dev
+    uv run pytest -v
+
+Repository instructions are in ``AGENTS.md``. The implementation's processing
+flow is documented in ``docs/README.md``.

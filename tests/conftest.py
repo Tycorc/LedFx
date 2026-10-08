@@ -29,14 +29,10 @@ os.environ["LEDFX_API_VALIDATE_RESPONSES"] = "1"
 ledfx: subprocess.Popen[bytes] | None = None
 LEDFX_OUT = os.path.join(TEST_CONFIG_DIR, "ledfx-stdout.log")
 
-# LIFX emulator globals
 lifx_emulator_thread = None
 lifx_emulator_loop = None
 lifx_emulator_server = None
 
-# Test device configuration (deterministic for test assertions)
-# Serial is 12 hex chars with prefix (d073d9 = matrix)
-# LIFX Ceiling (pid=176, 8x8 = 64 pixels)
 LIFX_TEST_SERIAL = "d073d9000001"
 LIFX_TEST_MATRIX_WIDTH = 8
 LIFX_TEST_MATRIX_HEIGHT = 8
@@ -49,7 +45,6 @@ def _run_lifx_emulator():
     lifx_emulator_loop = asyncio.new_event_loop()
     asyncio.set_event_loop(lifx_emulator_loop)
 
-    # Create emulated LIFX Ceiling (8x8 = 64 pixel matrix)
     devices = [
         create_device(
             product_id=176,  # LIFX Ceiling US
@@ -60,7 +55,6 @@ def _run_lifx_emulator():
         ),
     ]
 
-    # Initialize device manager and server
     repository = DeviceRepository()
     manager = DeviceManager(repository)
     lifx_emulator_server = EmulatedLifxServer(
@@ -73,7 +67,6 @@ def _run_lifx_emulator():
 
     async def run_server():
         await lifx_emulator_server.start()
-        # Keep running until stopped
         while True:
             await asyncio.sleep(1)
 
@@ -91,7 +84,6 @@ def _start_lifx_emulator():
     global lifx_emulator_thread
     lifx_emulator_thread = threading.Thread(target=_run_lifx_emulator, daemon=True)
     lifx_emulator_thread.start()
-    # Wait for emulator to bind to port
     for _ in range(50):  # 5 second timeout
         if lifx_emulator_server and lifx_emulator_server.transport:
             break
@@ -201,7 +193,6 @@ def _start_ledfx() -> None:
     os.makedirs(TEST_CONFIG_DIR)
     open(marker, "w").close()
 
-    # Start LIFX emulator before LedFx
     _start_lifx_emulator()
 
     with open(LEDFX_OUT, "wb") as out:
@@ -222,9 +213,6 @@ def _start_ledfx() -> None:
         )
     _wait_until_ready(ledfx)
 
-    # Dynamic import of tests happens here
-    # Needs to be done at session start so that the tests are available to pytest
-    # This is a hack to get around the fact that pytest doesn't support dynamic imports
     all_effects = get_ledfx_effects()
     audio_configs = get_ledfx_audio_configs()
     # To add another test group, add it here, and then in test_apis.py

@@ -1,15 +1,5 @@
-# Checks that the PR title is a Conventional Commit. main squash-merges with
-# the PR title as the commit subject, and release-please (release-please.yml)
-# builds the version bump and changelog from those subjects, so a title it
-# cannot parse leaves the change out of the release notes.
-#
-# On failure, ledfx-automation[bot] posts one comment with a suggested title,
-# edits it on later failures, and deletes it once the title passes.
-#
-# pull_request_target, so the bot can comment on fork PRs. Safe shape (see
-# zizmor.yml): this file and pr_title.py always run from the default branch;
-# PR code is never checked out or run, and the title reaches the script only
-# through an environment variable.
+# Conventional PR titles drive squash-commit releases; the bot maintains one failure comment.
+# pull_request_target runs default-branch code only; untrusted titles stay in environment variables.
 
 name: PR title
 

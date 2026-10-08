@@ -11,24 +11,12 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class AssetsEndpoint(RestEndpoint):
-    """
-    REST API endpoint for asset management.
-
-    Provides secure upload, download, deletion, and listing of image assets
-    stored under .ledfx/assets directory.
-    """
+    """REST API endpoint for asset management."""
 
     ENDPOINT_PATH = "/api/assets"
 
     async def get(self) -> web.Response:
-        """
-        List all available assets with metadata.
-
-        Returns:
-            Bare JSON response with list of asset metadata objects,
-            each containing path, size, modified timestamp, width, and height,
-            or error response if listing fails.
-        """
+        """List all available assets with metadata."""
         try:
             asset_list = assets.list_assets(self._ledfx.config_dir)
             return await self.bare_request_success({"assets": asset_list})
@@ -37,17 +25,7 @@ class AssetsEndpoint(RestEndpoint):
             return await self.internal_error(message=f"Failed to list assets: {e}")
 
     async def post(self, request: web.Request) -> web.Response:
-        """
-        Upload a new asset.
-
-        Expects multipart/form-data with:
-            - file: The image file to upload
-            - path: Relative path where the asset should be stored
-
-        Returns:
-            Success response with normalized asset path,
-            or error response if validation fails or path is invalid.
-        """
+        """Upload a new asset."""
         file_data = None
         asset_path = None
 
@@ -55,7 +33,6 @@ class AssetsEndpoint(RestEndpoint):
             return await self.invalid_request(
                 message="Upload must be multipart/form-data"
             )
-        # Read multipart data
         reader = await request.multipart()
         while True:
             part = await reader.next()
@@ -79,7 +56,6 @@ class AssetsEndpoint(RestEndpoint):
                 type="error",
             )
 
-        # Save the asset
         success, abs_path, error = assets.save_asset(  # noqa: RUF059
             self._ledfx.config_dir,
             asset_path,
@@ -100,25 +76,9 @@ class AssetsEndpoint(RestEndpoint):
         )
 
     async def delete(self, request: web.Request) -> web.Response:
-        """
-        Delete an asset.
-
-        Supports both query parameter and JSON body for browser compatibility.
-
-        Query Parameters:
-            path (optional): Relative path to asset to delete
-
-        Request Body (JSON, fallback):
-            path (optional): Relative path to asset to delete
-
-        Returns:
-            Success response if asset was deleted,
-            or error response if path is invalid or asset doesn't exist.
-        """
-        # Try query parameter first (preferred for DELETE)
+        """Delete an asset."""
         asset_path = request.query.get("path")
 
-        # Fallback to JSON body if no query parameter
         if not asset_path:
             try:
                 data = await request.json()

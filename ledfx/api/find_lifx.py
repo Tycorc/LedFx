@@ -13,21 +13,14 @@ from ledfx.api import RestEndpoint
 
 _LOGGER = logging.getLogger(__name__)
 
-# Number of broadcast packets to send (handles packet loss on large networks)
 UDP_BROADCAST_COUNT = 3
-# Delay between broadcast packets (seconds)
 UDP_BROADCAST_DELAY = 0.3
-# LIFX UDP port
 LIFX_UDP_PORT = 56700
 
-# Extra seconds a discovery may run past discovery_timeout (device queries
-# and adds after the last reply) before it is cancelled.
 DISCOVERY_GRACE = 5
 
-# Valid discovery methods
 DISCOVERY_METHODS = ("udp", "mdns", "both")
 
-# Map lifx-async device types to internal category names
 LIFX_CATEGORY_MAP = {
     "Light": "light",
     "HevLight": "light",
@@ -72,7 +65,6 @@ class FindLifxEndpoint(RestEndpoint):
         Returns:
             Device info dict, or None if device was already seen
         """
-        # Skip if we've already seen this device (for "both" method)
         if device.serial in seen_serials:
             await device.close()
             return None
@@ -97,7 +89,6 @@ class FindLifxEndpoint(RestEndpoint):
                 "added": False,
             }
 
-            # Auto-add device if requested
             if auto_add:
                 existing = self._find_existing_lifx_by_serial(device.serial)
                 if existing:
@@ -136,7 +127,6 @@ class FindLifxEndpoint(RestEndpoint):
             )
             return device_info
         finally:
-            # Also on cancellation: the scan deadline can stop us mid-device.
             await device.close()
 
     async def _discover_udp(self, timeout, broadcast_address, auto_add, seen_serials):
@@ -160,10 +150,8 @@ class FindLifxEndpoint(RestEndpoint):
         """
         devices = []
 
-        # Generate a random source ID for this discovery session
         source_id = random.randint(2, 0xFFFFFFFF)
 
-        # Create GetService broadcast packet
         get_service = packets.Device.GetService()
         message = create_message(
             get_service,
@@ -176,7 +164,6 @@ class FindLifxEndpoint(RestEndpoint):
             async with UdpTransport(broadcast=True) as transport:
                 broadcast_addr = (broadcast_address, LIFX_UDP_PORT)
 
-                # Send multiple broadcast packets to handle packet loss
                 for i in range(UDP_BROADCAST_COUNT):
                     await transport.send(message, broadcast_addr)
                     _LOGGER.info(
@@ -189,7 +176,6 @@ class FindLifxEndpoint(RestEndpoint):
                     if i < UDP_BROADCAST_COUNT - 1:
                         await asyncio.sleep(UDP_BROADCAST_DELAY)
 
-                # Listen for responses for the full timeout
                 _LOGGER.info(
                     "LIFX UDP listening for responses (%.0fs timeout)...",
                     timeout,
@@ -211,15 +197,10 @@ class FindLifxEndpoint(RestEndpoint):
                         )
                         response_count += 1
 
-                        # Parse the response
                         header, _ = parse_message(data)
 
-                        # Extract serial from header target field.
-                        # header.target is 8 bytes but LIFX serials are the
-                        # last 6 bytes (12 hex chars), matching device.serial.
                         serial = header.target[:6].hex()
 
-                        # Skip if already seen
                         if serial in seen_serials:
                             continue
 
@@ -231,7 +212,6 @@ class FindLifxEndpoint(RestEndpoint):
                             serial,
                         )
 
-                        # Use find_by_ip to get full device info
                         try:
                             device = await find_by_ip(ip=ip)
                             if device:
@@ -250,7 +230,6 @@ class FindLifxEndpoint(RestEndpoint):
                             )
 
                     except LifxError:
-                        # Timeout on receive, continue loop to check overall timeout
                         pass
 
                 _LOGGER.info(
@@ -331,7 +310,6 @@ class FindLifxEndpoint(RestEndpoint):
                 f"Invalid discovery method '{method}'. Must be one of: {', '.join(DISCOVERY_METHODS)}"
             )
 
-        # Read fresh values from global config (allows frontend to update before discovery)
         config_timeout = self._ledfx.config.lifx_discovery_timeout
         config_broadcast = self._ledfx.config.lifx_broadcast_address
         _LOGGER.debug(
@@ -473,7 +451,6 @@ class FindLifxEndpoint(RestEndpoint):
                     f"No LIFX device found at {ip_address}"
                 )
 
-            # Use context manager to ensure cleanup and auto-populate label
             async with device:
                 lifx_type = type(device).__name__
                 category = LIFX_CATEGORY_MAP.get(lifx_type, "light")

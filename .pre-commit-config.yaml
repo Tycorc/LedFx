@@ -1,5 +1,3 @@
-# Run with prek: `uv run prek run --all-files`, or `uv run prek install` for a
-# git hook. `repo: builtin` hooks are prek-only (plain pre-commit can't run them).
 # ledfx_frontend/ and the vendored Scalar bundle are built files: whitespace
 # there can sit inside JS strings, and the Scalar bundle must match its sha256.
 exclude: ^(ledfx_frontend/|ledfx/api/v2/docs/scalar\.standalone\.js$)
@@ -28,11 +26,6 @@ repos:
         language: system
         types_or: [python, pyi, jupyter, markdown]
         require_serial: true
-  # Structural check that ClassVar annotations describe their literals.
-  # Ruff's RUF012 cannot see this (it only asks that an annotation exist).
-  # language: python lets prek provision the interpreter via its uv
-  # integration: no python(3) on PATH needed (Windows, uv-only setups),
-  # and it works in CI where the project venv is not synced.
   - repo: local
     hooks:
       - id: classvar-audit
@@ -53,10 +46,6 @@ repos:
         entry: python tools/update_scalar.py --sync
         pass_filenames: false
         files: ^ledfx/api/v2/docs/(SCALAR_VERSION|docs\.html)$
-  # GitHub Actions security audit. Config in .github/zizmor.yml; the gate
-  # is --min-severity high (informational findings stay advisory).
-  # prek provisions zizmor itself (language: python), so no system tooling.
-  # rev is the zizmor version: one bump moves hook rev and binary together.
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
     rev: v1.30.1
     hooks:

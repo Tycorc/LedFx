@@ -1,14 +1,7 @@
-# Keeps a release PR open while releasable commits (Conventional Commits; see
 # pr-title.yml) are on main or the maintenance branch, and releases when merged.
-#
-# Merging the release PR bumps pyproject.toml, uv.lock and ledfx/consts.py,
-# writes CHANGELOG.md, and (on the push that follows) creates the v<version>
-# tag and a DRAFT GitHub release holding the changelog. The tag triggers
 # ci.yml's publish-release job behind the production approval. It verifies and
 # promotes tested artifacts, then publishes the draft last using the App token.
 # release-notifications.yml responds independently to release:published.
-# Nothing here publishes anything, and the update checker never sees a
-# release without assets.
 name: release-please
 
 on:

@@ -28,31 +28,18 @@ def _list_devices(server: str, port: int) -> list[dict[str, object]]:
 
 
 class FindOpenRGBDevicesEndpoint(RestEndpoint):
-    """
-    REST end-point for detecting and reporting OpenRGB devices.
-    """
+    """REST end-point for detecting and reporting OpenRGB devices."""
 
     ENDPOINT_PATH = "/api/find_openrgb"
 
     async def get(self) -> web.Response:
-        """
-        Check for an OpenRGB server at localhost on the default port and report devices if found.
-
-        Returns:
-            web.Response: The HTTP response object containing either an error, or a dict of OpenRGB devices at localhost:6742.
+        """Check for an OpenRGB server at localhost on the default port and report
+        devices if found.
         """
         return await self._find("127.0.0.1", 6742)
 
     async def post(self, request: web.Request) -> web.Response:
-        """
-        Check for an OpenRGB server at and report devices if found.
-
-        Args:
-            request (web.Request): The incoming request object that contains the `server` (str) and `port` (str or int). Defaults to 127.0.0.1 and 6742 if not provided.
-
-        Returns:
-            web.Response: The HTTP response object containing either an error, or a dict of OpenRGB devices on the given server.
-        """
+        """Check for an OpenRGB server at and report devices if found."""
         try:
             data = await request.json()
         except JSONDecodeError:

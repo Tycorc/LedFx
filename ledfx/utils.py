@@ -33,8 +33,6 @@ from platform import (
     release,
     system,
 )
-
-# from asyncio import coroutines, ensure_future
 from typing import TYPE_CHECKING, ClassVar
 
 import netifaces
@@ -73,25 +71,16 @@ if TYPE_CHECKING:
     from ledfx.configuration.plugin import PluginConfig
     from ledfx.core import LedFxCore
 
-# from asyncio import coroutines, ensure_future
-
 
 _LOGGER = logging.getLogger(__name__)
 
 
-# perf_counter is high resolution everywhere, and since 3.11 sleep on
-# windows is perf based too (monotonic still reports ~15ms there)
 clock_source = "perf_counter"
 
 
 def calc_available_fps():
-    """
-        Calculates the available frames per second (FPS) based on the sleep resolution of the clock source.
-
-    Note: Used in tests/test_utils.py - if you change this method, please update the test function as well.
-
-        Returns:
-                dict: A dictionary where the keys represent the FPS and the values represent the corresponding multiplier.
+    """Calculates the available frames per second (FPS) based on the sleep resolution
+    of the clock source.
     """
     sleep_res = time.get_clock_info(clock_source).resolution
 
@@ -114,15 +103,7 @@ AVAILABLE_FPS = calc_available_fps()
 
 @lru_cache(maxsize=32)
 def fps_to_sleep_interval(fps):
-    """
-    Converts frames per second (fps) to a sleep interval in seconds.
-
-    Args:
-            fps (float): The desired frames per second.
-
-    Returns:
-            float: The sleep interval in seconds.
-    """
+    """Converts frames per second (fps) to a sleep interval in seconds."""
     sleep_res = time.get_clock_info(clock_source).resolution
     sleep_ticks = next(
         (t for f, t in AVAILABLE_FPS.items() if f >= fps),
@@ -132,20 +113,7 @@ def fps_to_sleep_interval(fps):
 
 
 def async_fire_and_forget(coro, loop, exc_handler=None):
-    """
-    Run some code in the core event loop without a result
-
-        Args:
-                coro: The coroutine to be executed.
-                loop: The event loop in which the coroutine should be executed.
-                exc_handler: Optional exception handler to be called when the coroutine completes with an exception.
-
-        Raises:
-                TypeError: If the coro parameter is not a coroutine object.
-
-        Returns:
-                None
-    """
+    """Run some code in the core event loop without a result"""
 
     if not asyncio.coroutines.iscoroutine(coro):
         raise TypeError(f"A coroutine object is required: {coro}")
@@ -160,14 +128,9 @@ def async_fire_and_forget(coro, loop, exc_handler=None):
 
 
 def get_local_ip():
-    """Uses a socket to find the first non-loopback ip address
-
-    Returns:
-        string: Either the first non-loopback ip address or hostname, or localhost
-    """
+    """Uses a socket to find the first non-loopback ip address"""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            # No packets are sent; connect selects the outbound interface.
             sock.connect(("8.8.8.8", 80))
             return sock.getsockname()[0]
     except OSError:
@@ -178,26 +141,15 @@ def get_local_ip():
 
 
 def check_if_ip_is_broadcast(thisip):
-    """
-    Check if provided IP is the broadcast address of
-    one of the network interfaces
-
-    Returns:
-        True if IP is a broadcast address, False otherwise.
-
-    """
+    """Check if provided IP is the broadcast address of one of the network interfaces"""
     try:
-        # iterate over all interfaces
         for iface in netifaces.interfaces():
             iface = netifaces.ifaddresses(iface)
-            # iterate over all ipv4 address (if available) for this interface
             if netifaces.AF_INET in iface:
                 for ip in iface[netifaces.AF_INET]:
-                    # check if a broadcast address is set and compare
                     if "broadcast" in ip and ip["broadcast"] == thisip:
                         return True
 
-        # no matching broadcast address found
         return False
 
     except OSError as e:
@@ -206,17 +158,8 @@ def check_if_ip_is_broadcast(thisip):
 
 
 def async_fire_and_return(coro, callback, timeout=10):
-    """
-    Run some async code in the core event loop with a callback to handle the result
-
-        Args:
-                coro (coroutine): The coroutine object to be executed.
-                callback (function): The callback function to handle the result of the coroutine.
-                timeout (float, optional): The maximum time to wait for the coroutine to complete. Defaults to 10.
-
-        Raises:
-                TypeError: If the provided coro is not a coroutine object.
-
+    """Run some async code in the core event loop with a callback to handle the
+    result
     """
     if not asyncio.coroutines.iscoroutine(coro):
         raise TypeError(f"A coroutine object is required: {coro}")
@@ -224,7 +167,6 @@ def async_fire_and_return(coro, callback, timeout=10):
     def _callback(future):
         exc = future.exception()
         if exc:
-            # Handle wonderful empty TimeoutError exception
             if isinstance(exc, TimeoutError):
                 _LOGGER.warning("Coroutine %s timed out.", future)
             else:
@@ -237,17 +179,7 @@ def async_fire_and_return(coro, callback, timeout=10):
 
 
 def async_callback(loop, callback, *args):
-    """
-    Run a callback in the event loop with access to the result
-
-        Args:
-                loop (asyncio.AbstractEventLoop): The event loop to run the callback in.
-                callback (Callable): The callback function to be executed.
-                *args: Variable length argument list to be passed to the callback function.
-
-        Returns:
-                concurrent.futures.Future: A future object representing the result of the callback.
-    """
+    """Run a callback in the event loop with access to the result"""
 
     future = concurrent.futures.Future()
 
@@ -266,9 +198,7 @@ def async_callback(loop, callback, *args):
 
 
 class WLED:
-    """
-    A collection of WLED helper functions
-    """
+    """A collection of WLED helper functions"""
 
     SYNC_MODES: ClassVar[dict[str, int]] = {"DDP": 4048, "E131": 5568, "ARTNET": 6454}
 
@@ -302,12 +232,9 @@ class WLED:
         return response.json()
 
     async def flush_sync_settings(self):
+        """JSON API call to flush wled sync settings to the device. Will reboot if
+        required.
         """
-        JSON API call to flush wled sync settings to the device. Will reboot if required.
-        """
-        # {'rb': True} must be sent to the '/state' endpoint
-        # if self.reboot_flag:
-        #     self.sync_settings["rb"] = True
         await WLED._wled_request(
             requests.post,
             self.ip_address,
@@ -317,15 +244,7 @@ class WLED:
         self.reboot_flag = False
 
     async def get_config(self):
-        """
-            Uses a JSON API call to determine if the device is WLED or WLED compatible
-            and return its config.
-            As of WLED 0.15 brand is now being used to indicate specific variants of WLED
-            The brand field can no longer be depended on to indicate a compatible device
-            We now only check that brand exists as a field in the config
-        Returns:
-            config: dict, with all wled configuration info
-        """
+        """Return WLED-compatible config; brand must exist but need not equal WLED."""
         _LOGGER.info("WLED %s: Attempting to contact device...", self.ip_address)
         response = await WLED._wled_request(requests.get, self.ip_address, "json/info")
 
@@ -343,10 +262,8 @@ class WLED:
         return wled_config
 
     async def get_nodes(self):
-        """
-            Uses a JSON API call to pull WLED nodes from the known WLED instance
-        Returns:
-            nodes: dict, with all wled nodes info
+        """Uses a JSON API call to pull WLED nodes from the known WLED instance
+        Returns: nodes: dict, with all wled nodes info
         """
         _LOGGER.info("WLED %s: Attempting to get nodes...", self.ip_address)
         response = await WLED._wled_request(requests.get, self.ip_address, "json/nodes")
@@ -358,45 +275,23 @@ class WLED:
         return wled_nodes
 
     async def get_state(self):
-        """
-            Uses a JSON API call to determine the full WLED device state
-
-        Returns:
-            state, dict. Full device state
-        """
+        """Uses a JSON API call to determine the full WLED device state"""
         response = await WLED._wled_request(requests.get, self.ip_address, "json/state")
 
         return response.json()
 
     async def get_power_state(self):
-        """
-            Uses a JSON API call to determine the WLED device power state (on/off)
-
-        Args:
-            ip_address (string): The device IP to be queried
-        Returns:
-            boolean: True is "On", False is "Off"
-        """
+        """Uses a JSON API call to determine the WLED device power state (on/off)"""
         return (await self.get_state())["on"]
 
     async def get_segments(self):
-        """
-            Uses a JSON API call to determine the WLED segment setup
-
-        Args:
-            ip_address (string): The device IP to be queried
-        Returns:
-            dict: array of segments
-        """
+        """Uses a JSON API call to determine the WLED segment setup"""
         res = await self.get_state()
         return res["seg"]
 
     async def set_power_state(self, state):
-        """
-            Uses a JSON API post call to set the power of a WLED compatible device on/off
-
-        Args:
-            state (bool): on/off
+        """Uses a JSON API post call to set the power of a WLED compatible device
+        on/off
         """
         power = {"on": bool(state)}
         await WLED._wled_request(
@@ -406,14 +301,7 @@ class WLED:
         _LOGGER.info("WLED %s: Turned %s.", self.ip_address, "on" if state else "off")
 
     async def set_brightness(self, brightness):
-        """
-            Uses a JSON API post call to adjust a WLED compatible device's
-            brightness
-
-        Args:
-            brightness (int): The brightness value between 0-255
-        """
-        # cast to int and clamp to range
+        """Uses a JSON API post call to adjust a WLED compatible device's brightness"""
         brightness = max(0, max(int(brightness), 255))
         bri = {"bri": brightness}
 
@@ -424,70 +312,43 @@ class WLED:
         _LOGGER.info("WLED %s: Set brightness to %s.", self.ip_address, brightness)
 
     def enable_realtime_gamma(self):
-        """
-        Updates internal sync settings to enable realtime gamma
-
-        {"if": {"live": {"no-gc": True|False}}}
-        """
+        """Updates internal sync settings to enable realtime gamma"""
 
         self.sync_settings["if"]["live"]["no-gc"] = False
 
         _LOGGER.info("WLED %s: Enabled realtime gamma correction", self.ip_address)
 
     def force_max_brightness(self):
-        """
-        Updates internal sync settings to enable "Force Max Brightness"
-
-        {"if": {"live": {"maxbri": True|False}}}
-        """
+        """Updates internal sync settings to enable \"Force Max Brightness\""""
         self.sync_settings["if"]["live"]["maxbri"] = True
 
         _LOGGER.info("WLED %s: Enabled force max brightness", self.ip_address)
 
     def multirgb_dmx_mode(self):
-        """
-        Updates DMX mode to "Multi RGB"
-
-        {"if": {"live": {"dmx": {"mode": 0-6}}}}
-        """
+        """Updates DMX mode to \"Multi RGB\""""
         self.sync_settings["if"]["live"]["dmx"]["mode"] = 4
 
         _LOGGER.info("WLED %s: Enabled Multi RGB", self.ip_address)
 
     def first_universe(self):
-        """
-        Updates first universe to "1"
-
-        {"if": {"live": {"dmx": {"uni": 1}}}}
-        """
+        """Updates first universe to \"1\""""
         self.sync_settings["if"]["live"]["dmx"]["uni"] = 1
 
         _LOGGER.info("WLED %s: Set first Universe = 1", self.ip_address)
 
     def first_dmx_address(self):
-        """
-        Updates first dmx address to "1"
-
-        {"if": {"live": {"dmx": {"addr": 1}}}}
-        """
+        """Updates first dmx address to \"1\""""
         self.sync_settings["if"]["live"]["dmx"]["addr"] = 1
 
         _LOGGER.info("WLED %s: Set first DMX address = 1", self.ip_address)
 
     def get_inactivity_timeout(self):
-        """
-        Get inactivity timeout from internal sync settings
-
-        {"if": {"live": {"timeout": 25(2.5s)}}}
-        """
+        """Get inactivity timeout from internal sync settings"""
         return self.sync_settings["if"]["live"]["timeout"]
 
     def set_inactivity_timeout(self, timeout=2.5):
-        """
-        Updates internal sync settings to set timeout for wled effect virtual after ledfx streaming finishes
-
-        Args:
-            timeout: int/float, seconds
+        """Updates internal sync settings to set timeout for wled effect virtual
+        after ledfx streaming finishes
         """
         tout = self.sync_settings["if"]["live"]["timeout"]
         if tout * 10 == timeout:
@@ -498,26 +359,18 @@ class WLED:
         _LOGGER.info("Set WLED device at %s timeout to %ss", self.ip_address, timeout)
 
     def set_sync_mode(self, mode):
-        """
-        Updates internal sync settings to set sync mode
-
-        Args:
-            mode: str, in ["ddp", "e131", "artnet" or "udp"]
-        """
+        """Updates internal sync settings to set sync mode"""
         mode = mode.upper()
 
         assert mode in WLED.SYNC_MODES
 
         if mode == "udp":
-            # if realtime udp is already enabled, we're good to go
             if self.sync_settings["if"]["live"]["en"]:
                 return
             else:
                 self.sync_settings["if"]["live"]["en"] = True
 
         else:
-            # make sure the mode isn't already set, if so no need to go on.
-            # for clarity, this is a reverse dict lookup
             if mode == self.get_sync_mode():
                 return
             port = WLED.SYNC_MODES[mode]
@@ -528,19 +381,13 @@ class WLED:
         _LOGGER.info("Set WLED device at %s to sync mode '%s'", self.ip_address, mode)
 
     def get_sync_mode(self):
-        """
-        Reverse dict lookup of current sync mode by port
-
-        {"if": {"live": {"port": 5568|6454|4048}}}
-        """
+        """Reverse dict lookup of current sync mode by port"""
         sync_port = self.sync_settings["if"]["live"]["port"]
 
         return next(key for key, value in WLED.SYNC_MODES.items() if value == sync_port)
 
     async def reboot(self):
-        """
-        JSON API Post to reboot wled device
-        """
+        """JSON API Post to reboot wled device"""
         reboot = {"rb": True}
         await WLED._wled_request(
             requests.post,
@@ -552,29 +399,14 @@ class WLED:
 
 
 def empty_queue(queue: asyncio.Queue):
-    """Empty an asyncio queue
-
-    Args:
-        queue (asyncio.Queue): The asyncio queue to empty
-    """
+    """Empty an asyncio queue"""
     for _ in range(queue.qsize()):
         queue.get_nowait()
         queue.task_done()
 
 
 async def resolve_destination(loop, executor, destination, port=7777, timeout=3):
-    """Uses asyncio's non blocking DNS funcs to attempt domain lookup
-
-    Args:
-        loop: ledfx event loop (ledfx.loop)
-        executor: ledfx executor (ledfx.thread_executor)
-        destination (string): The domain name to be resolved.
-        timeout, optional (int/float): timeout for the operation
-
-    Returns:
-        On success: string containing the resolved IP address.
-        On failure: boolean false.
-    """
+    """Uses asyncio's non blocking DNS funcs to attempt domain lookup"""
     try:
         ipaddress.ip_address(destination)
         return destination
@@ -587,30 +419,12 @@ async def resolve_destination(loop, executor, destination, port=7777, timeout=3)
             )
             _LOGGER.debug("Resolved %s to %s", cleaned_dest, dest)
             return dest
-            # dest = await loop.getaddrinfo(cleaned_dest, port)
-            # return dest[0][4][0]
         except socket.gaierror:
             raise ValueError(f"Failed to resolve destination {cleaned_dest}")
 
 
 def read_ledfx_dotenv():
-    """
-    Loads the environment variables from the ledfx.env file.
-
-    In normal development, this does not exist and thus does nothing.
-
-    During the CI build and release process, the ledfx.env file is created and populated with:
-
-    IS_RELEASE = [true|false]
-    GITHUB_SHA = [commit hash]
-
-    It is then packaged in the ledfx folder for distribution.
-
-    If the code is running from a frozen executable, it loads the .env file from the executable's directory.
-    Otherwise, it loads the .env file from the parent directory of the current script.
-
-
-    """
+    """Load packaged release metadata from ledfx.env; absent in normal development."""
     extDataDir = os.path.dirname(os.path.realpath(__file__))
 
     if currently_frozen():
@@ -625,27 +439,15 @@ def read_ledfx_dotenv():
 
 
 def currently_frozen():
-    """Checks to see if running in a frozen environment such as pyinstaller created binaries
-    Args:
-        Nil
-
-    Returns:
-        boolean
+    """Checks to see if running in a frozen environment such as pyinstaller created
+    binaries Args: Nil
     """
     return getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
 
 
 def get_icon_path(icon_filename) -> str:
-    """
-    Returns fully qualified path for the tray icon
-    Assumes that the file is within ledfx_assets folder
-
-
-    Parameters:
-        icon_filename(str): the filename of the icon
-
-    Returns:
-            icon_location(str): fully qualified path
+    """Returns fully qualified path for the tray icon Assumes that the file is within
+    ledfx_assets folder
     """
 
     icon_location = os.path.normpath(os.path.join(LEDFX_ASSETS_PATH, icon_filename))
@@ -657,15 +459,7 @@ def get_icon_path(icon_filename) -> str:
 
 
 def generate_id(name):
-    """
-    Converts a name to an ID.
-
-    Args:
-            name (str): The name to be converted.
-
-    Returns:
-            str: The converted ID.
-    """
+    """Converts a name to an ID."""
     part1 = re.sub("[^a-zA-Z0-9]", " ", name).lower()
     result = re.sub(" +", " ", part1).strip().replace(" ", "-")
     if result == "":
@@ -674,51 +468,19 @@ def generate_id(name):
 
 
 def generate_title(id):
-    """
-    Converts an id to a more human readable title.
-
-    Args:
-            id (str): The id to be converted.
-
-    Returns:
-            str: The human readable title.
-
-    """
+    """Converts an id to a more human readable title."""
     return re.sub("[^a-zA-Z0-9]", " ", id).title()
 
 
 def is_gap_device(device) -> bool:
-    """
-    Check if a device is a fake gap device used for discontiguous mappings.
-
-    Gap devices are dummy placeholders created by the frontend's matrix editor
-    to represent empty/unused pixels in discontiguous layouts. They should be
-    skipped during rendering and device processing.
-
-    A device is considered a gap device if and only if:
-    1. The device ID starts with "gap-"
-    2. The device type is "dummy"
-
-    Args:
-        device: The device object to check. Can be None.
-
-    Returns:
-        bool: True if the device ID starts with "gap-" AND the device type
-              is "dummy", False otherwise (including when device is None).
-    """
+    """Return true only for dummy devices whose IDs start with gap-."""
     if device is None:
         return False
     return device.id.startswith("gap-") and device.type == "dummy"
 
 
 class UserDefaultCollection(MutableMapping):
-    """
-    A collection of default values and user defined values.
-    User defined values are saved automatically in LedFx config.
-    Items can be retrieved by name as if user and default values are a single dictionary.
-    Validator is a callable that returns sanitized  value or raises ValueError if there's a problem
-    Parser is a callable that translates config values into a valid form for ledfx to use
-    """
+    """A collection of default values and user defined values."""
 
     def __init__(
         self,
@@ -729,10 +491,9 @@ class UserDefaultCollection(MutableMapping):
         validator: callable = lambda x: x,
         parser: callable = lambda x: x,
     ):
-        """
-        collection_name: friendly description of the collection
-        defaults: dict of default values
-        user: the live config dict of user values (e.g. config.user_colors)
+        """collection_name: friendly description of the collection defaults: dict of
+        default values user: the live config dict of user values (e.g.
+        config.user_colors)
         """
         self._ledfx = ledfx
         self._collection_name = collection_name
@@ -752,7 +513,6 @@ class UserDefaultCollection(MutableMapping):
         if val:
             return self._parser(val)
         raise KeyError(f"Unknown {self._collection_name}: {key}")
-        # _LOGGER.error("Unknown %s: %s", self._collection_name, name)
 
     def __delitem__(self, key):
         noun = self._collection_name.lower().rstrip("s")
@@ -761,7 +521,6 @@ class UserDefaultCollection(MutableMapping):
         del self._user_vals[key]
         _LOGGER.info("Deleted %s: %s", noun, key)
         self._ledfx.config_store.request_save()
-        # Fire event if colors or gradients were deleted
         if self._collection_name in ("Colors", "Gradients"):
             self._ledfx.events.fire_event(ColorsUpdatedEvent())
 
@@ -772,7 +531,6 @@ class UserDefaultCollection(MutableMapping):
         self._user_vals[key] = self._validator(value)
         _LOGGER.info("Saved %s: %s", noun, key)
         self._ledfx.config_store.request_save()
-        # Fire event if colors or gradients were updated
         if self._collection_name in ("Colors", "Gradients"):
             self._ledfx.events.fire_event(ColorsUpdatedEvent())
 
@@ -809,11 +567,7 @@ def build_user_collections(
 
 
 class RollingQueueHandler(QueueHandler):
-    """
-    A custom logging handler that extends the QueueHandler class.
-    This handler enqueues log records into a queue, and if the queue is full,
-    it removes the oldest record from the queue before enqueuing the new record.
-    """
+    """A custom logging handler that extends the QueueHandler class."""
 
     def enqueue(self, record):
         try:
@@ -824,14 +578,8 @@ class RollingQueueHandler(QueueHandler):
 
 
 class BaseRegistry(ABC):
-    """
-    Base registry class used for effects and devices. This maintains a
-    list of automatically registered base classes and assembles schema
-    information
-
-    The prevent registration for classes that are intended to serve as
-    base classes (i.e. GradientEffect) add the following declarator:
-        @Effect.no_registration
+    """Register plugins by module name; use no_registration for abstract effect
+    bases.
     """
 
     @classmethod
@@ -843,7 +591,9 @@ class BaseRegistry(ABC):
         return model
 
     def _set_config_values(self, **changes: object) -> None:
-        """Change derived config values (e.g. discovered pixel_count) and persist them."""
+        """Change derived config values (e.g. discovered pixel_count) and persist
+        them.
+        """
         config = self._config.with_values(**changes)
         if config == self._config:
             return  # e.g. WLED re-reporting the same values on every boot
@@ -904,9 +654,8 @@ class RegistryLoader:
         self.import_registry(package)
 
     def import_registry(self, package):
-        """
-        Imports all the modules in the package thus hydrating
-        the registry for the class
+        """Imports all the modules in the package thus hydrating the registry for the
+        class
         """
 
         found = self.discover_modules(package)
@@ -947,7 +696,9 @@ class RegistryLoader:
         return self._objects.values()
 
     def create(self, type, id=None, *args, **kwargs):
-        """Loads and creates an object from the registry by type. If type is missing, logs a warning and returns None instead of raising."""
+        """Loads and creates an object from the registry by type. If type is missing,
+        logs a warning and returns None instead of raising.
+        """
         if type not in self._cls.registry():
             _LOGGER.warning(
                 "Couldn't find '%s' in the %s registry. Skipping creation.",
@@ -958,24 +709,18 @@ class RegistryLoader:
 
         id = id or type
 
-        # Find the first valid id based on what is already in the registry
         dupe_id = id
         dupe_index = 1
         while id in self._objects:
             id = f"{dupe_id}-{dupe_index}"
             dupe_index = dupe_index + 1
 
-        # Create the new object based on the registry entries and validate the schema.
         _cls = self._cls.registry().get(type)
         _config = kwargs.pop("config", None)
-        # Startup loads pass lenient=<quarantine callback> (and optionally
-        # lenient_path and lenient_entry, the store entry a repair is written back
-        # to); API calls validate strictly and raise ValidationError.
         lenient = kwargs.pop("lenient", None)
         lenient_path = kwargs.pop("lenient_path", None)
         lenient_entry = kwargs.pop("lenient_entry", None)
         if _config is not None:
-            # Local import: ledfx.configuration imports ledfx.utils.
             from ledfx.configuration.plugin import PluginConfig
 
             raw = (
@@ -995,11 +740,9 @@ class RegistryLoader:
         else:
             obj = _cls(*args, **kwargs)
 
-        # Attach some common properties
         obj._id = id
         obj._type = type
 
-        # Store the object into the internal list and return it
         self._objects[id] = obj
         return obj
 
@@ -1015,8 +758,8 @@ class RegistryLoader:
     ) -> "PluginConfig | None":
         """Startup load: default and quarantine bad values instead of dropping the
         plugin, and write the repaired config back to its store entry so the next
-        boot finds nothing to quarantine. Returns None when the plugin must be
-        skipped (its stored config is left untouched)."""
+        boot finds nothing to quarantine.
+        """
         from pydantic import ValidationError
 
         from ledfx.configuration.lenient import lenient_validate
@@ -1037,7 +780,6 @@ class RegistryLoader:
             _LOGGER.warning("Skipping %s '%s': its config is unusable.", type, id)
         elif repairs and entry is not None:
             if self._ledfx.config_store.quarantine_failed:
-                # The dropped values exist only in config.json; keep it as is.
                 _LOGGER.error(
                     "Not saving the repaired %s '%s' config: its invalid values "
                     "could not be quarantined.",
@@ -1085,22 +827,7 @@ class Tag:
 
 
 class Graph:
-    """
-    Graph is a simple wrapper for bokeh to give high value multi range
-    time domain graphs with absolute minimum code
-    Supports mulitple ranges, and text tags
-
-    Lifecycle:
-        myGraph=("Animal hunt", ["Frogs", "Elephants"], y_title="Distance")
-        ...
-        myGraph.append_by_key("Frogs", 2.7)
-        myGraph.append_by_key("Elephants", 9.2)
-        ...
-        myGraph.append_by_key("Elephants", 6.0)
-        myGraph.append_tag("I am hungry", 1.0, color="red")
-
-        myGraph.dump_graph()
-    """
+    """Plot named time-series and tags with optional Bokeh browser output."""
 
     def __init__(
         self,
@@ -1111,17 +838,7 @@ class Graph:
         y_title="plumbus",
         y_axis_max=None,
     ):
-        """
-        Creates a graph instance, sets X axis to 0 seconds
-
-        Parameters:
-            title (str): String title to be displayed on graph
-            keys (list[(str)]: list of range titles to be display in key and available to append data values to
-            points (int): how many points to support in rolling buffer
-            tags (int): how many text tags to support in rolling buffer
-            y_title (str): Axis title for Y range
-            y_axis_max (float): If not None, will force the y axis max
-        """
+        """Creates a graph instance, sets X axis to 0 seconds"""
         self.title = title
         self.y_title = y_title
         self.y_axis_max = y_axis_max
@@ -1133,37 +850,20 @@ class Graph:
         self.tags = deque(maxlen=tags)
 
     def append_by_key(self, key, value):
-        """
-        Appends a value into range ring buffer associated with axis key, timestamp is applied in second since graph creation
-
-        Parameters:
-            key (str): key name of the range, matching those used during creation to which to append
-            value (float): value which you wish to append to the range
+        """Appends a value into range ring buffer associated with axis key, timestamp
+        is applied in second since graph creation
         """
         self.ranges[key].append(value)
 
     def append_tag(self, text, y, color="black"):
-        """
-        Appends a text tag into tag ring buffer, timestamp is applied in seconds since graph creation
-
-        Parameters:
-            text (str): text to be displayed as tag
-            y (float): value which you wish to display the tag
+        """Appends a text tag into tag ring buffer, timestamp is applied in seconds
+        since graph creation
         """
 
         self.tags.append(Tag(timeit.default_timer() - self.birth, y, text, color=color))
 
     def dump_graph(self, sub_title=None, jitter=False, only_jitter=False):
-        """
-        Will spawn an interaction graph session into the browser
-
-        Parameters:
-            sub_title (str): Optional sub title to add to the base title
-                             Useful for when you want to know why the graph
-                             was dumped
-            jitter (bool): If true, will dump the jitter graph
-            only_jitter (bool): If true, will only dump the jitter graph
-        """
+        """Will spawn an interaction graph session into the browser"""
         try:
             from itertools import cycle
 
@@ -1238,8 +938,6 @@ class Graph:
             )
 
             for a_range in self.ranges.values():
-                # Calculte jitter for range x and prestuff so len is same
-                # don't use numpy due to some side effects
                 x = a_range.list_x()
                 if len(x) > 0:
                     jitter = [x[i + 1] - x[i] for i in range(len(x) - 1)]
@@ -1267,7 +965,6 @@ class Graph:
 
             jitter_fig.legend.click_policy = "hide"
 
-        # work out layour according to requested graphs
         if only_jitter:
             p = column(jitter_fig)
         elif jitter:
@@ -1284,19 +981,11 @@ class Graph:
 
 
 def wled_support_DDP(build) -> bool:
-    # https://github.com/Aircoookie/WLED/blob/main/CHANGELOG.md#build-2110060
     return build >= 2110060
 
 
 def clean_ip(ip_address):
-    """Strip common error input from IP copy from chrome that is actually a URL
-
-    Args:
-        ip_address (string): The IP address to be cleaned
-
-    Returns:
-        string: The cleaned IP address
-    """
+    """Strip common error input from IP copy from chrome that is actually a URL"""
 
     return ip_address.replace("https://", "").replace("http://", "").replace("/", "")
 
@@ -1317,45 +1006,26 @@ def get_icon_name(wled_name):
 
 
 def extract_positive_integers(s):
-    # Use regular expression to find all sequences of digits
     numbers = re.findall(r"\d+", s)
 
-    # Convert each found sequence to an integer
-    # filter out non-positive numbers
-    # make list unique values via set
     return list({int(num) for num in numbers if int(num) >= 0})
 
 
 def extract_uint8_seq(s):
-    # Use regular expression to find all sequences of digits
     numbers = re.findall(r"\d+", s)
-    # discard anything outside of uint8 range
     return [int(num) for num in numbers if 0 <= int(num) <= 255]
 
 
 def clip_at_limit(numbers, limit):
-    # Keep only values that are less than the limit
     return [num for num in numbers if num < limit]
 
 
-# =============================================================================
-# Image Security Validation Functions
-# =============================================================================
-
-# Global image cache instance and config directory
 _image_cache = None
 _config_dir = None
 
 
 def init_image_cache(config_dir: str, max_size_mb: int = 500, max_items: int = 500):
-    """
-    Initialize global image cache.
-
-    Args:
-        config_dir: LedFx configuration directory
-        max_size_mb: Maximum cache size in MB (default 500)
-        max_items: Maximum number of cached items (default 500)
-    """
+    """Initialize global image cache."""
     global _image_cache, _config_dir
 
     _config_dir = os.path.abspath(config_dir)
@@ -1369,43 +1039,20 @@ def get_image_cache():
 
 
 def validate_local_image_path(file_path: str) -> tuple[bool, str | None]:
-    """
-    Validate that local image file path is within allowed directories (path traversal protection).
-
-    Allowed directories:
-    - Config directory (user data)
-    - LEDFX_ASSETS_PATH (built-in assets for presets)
-
-    Args:
-        file_path: Local file path to validate
-
-    Returns:
-        tuple: (is_valid, validated_path) where validated_path is the absolute normalized path
-               or None if validation failed
+    """Validate that local image file path is within allowed directories (path
+    traversal protection).
     """
     if not _config_dir:
         _LOGGER.warning("Config directory not initialized, rejecting local file access")
         return False, None
 
-    # Delegate to centralized security function
     return validate_local_path(file_path, [_config_dir, LEDFX_ASSETS_PATH])
 
 
 def _validate_and_open_image(
     resolved_path: str, original_path: str, check_size: bool = True
 ) -> Image.Image | None:
-    """
-    Validate and open an image file with security checks.
-
-    Args:
-        resolved_path: Absolute path to the image file
-        original_path: Original path for error messages
-        check_size: Whether to check file size limits
-
-    Returns:
-        PIL Image object or None if validation fails
-    """
-    # Check file exists
+    """Validate and open an image file with security checks."""
     if not os.path.exists(resolved_path):
         _LOGGER.warning("File not found: %s", original_path)
         return None
@@ -1414,12 +1061,10 @@ def _validate_and_open_image(
         _LOGGER.warning("Path is not a file: %s", original_path)
         return None
 
-    # Validate extension
     if not is_allowed_image_extension(resolved_path):
         _LOGGER.warning("Invalid image extension: %s", original_path)
         return None
 
-    # Check file size
     if check_size:
         file_size = os.path.getsize(resolved_path)
         if file_size > MAX_IMAGE_SIZE_BYTES:
@@ -1430,24 +1075,20 @@ def _validate_and_open_image(
             )
             return None
 
-    # Validate MIME type
     if not validate_image_mime_type(resolved_path):
         _LOGGER.warning("Invalid image MIME type: %s", original_path)
         return None
 
-    # Open the image
     try:
         gif = Image.open(resolved_path)
     except Exception as e:  # noqa: BLE001
         _LOGGER.warning("Failed to open image: %s : %s", original_path, e)
         return None
 
-    # Validate PIL format and dimensions
     if not validate_pil_image(gif):
         _LOGGER.warning("Invalid PIL format or dimensions: %s", original_path)
         return None
 
-    # Protect against single frame image like png, jpg
     if not hasattr(gif, "n_frames"):
         gif.n_frames = 1
 
@@ -1455,52 +1096,21 @@ def _validate_and_open_image(
 
 
 def open_gif(gif_path, force_refresh=False, config_dir=None):
-    """
-    Open a GIF image from a URL or local file path with file type validation.
-
-    Supports:
-    - URLs: http://, https:// (with caching)
-    - Built-in assets: builtin://path (from LEDFX_ASSETS_PATH/gifs/)
-    - Legacy built-in: ./ledfx_assets/gifs/path or ledfx_assets/gifs/path (converted to builtin://)
-    - User assets: plain paths like "my_animation.gif" (from config_dir/assets/) - requires config_dir
-    - Legacy: absolute/relative local file paths (validated within config directory)
-
-    Args:
-        gif_path: URL, builtin://path, or plain filename/path to the image
-        force_refresh: Force download from URL, bypassing cache (default False)
-        config_dir: LedFx config directory (required for user assets and local paths)
-
-    Returns:
-        PIL Image object or None if failed
-
-    Examples:
-        "https://example.com/image.gif" -> Downloads and caches
-        "builtin://skull.gif" -> Built-in asset from LEDFX_ASSETS_PATH/gifs/
-        "builtin://pixelart/dj_bird.gif" -> Nested built-in asset
-        "./ledfx_assets/gifs/skull.gif" -> Legacy format, converted to builtin://skull.gif
-        "my_animation.gif" -> User asset from config_dir/assets/my_animation.gif (when config_dir provided)
-        "subfolder/animation.gif" -> User asset from config_dir/assets/subfolder/animation.gif
-    """
+    """Open a GIF image from a URL or local file path with file type validation."""
     gif_path = gif_path.strip()
 
     try:
-        # Handle legacy ledfx_assets paths (e.g., "./ledfx_assets/gifs/skull.gif")
-        # Convert to builtin:// format for consistent handling
         if gif_path.startswith("./ledfx_assets/gifs/"):
-            # Strip "./ledfx_assets/gifs/" prefix, keep filename
             actual_path = gif_path[20:]  # Remove "./ledfx_assets/gifs/"
             gif_path = f"builtin://{actual_path}"
         elif gif_path.startswith("ledfx_assets/gifs/"):
-            # Strip "ledfx_assets/gifs/" prefix, keep filename
             actual_path = gif_path[18:]  # Remove "ledfx_assets/gifs/"
             gif_path = f"builtin://{actual_path}"
 
-        # Handle builtin:// prefix
         if gif_path.startswith("builtin://"):
             actual_path = gif_path[10:]  # Remove "builtin://" prefix
             gifs_root = os.path.join(LEDFX_ASSETS_PATH, "gifs")
 
-            # Resolve and validate path
             is_valid, resolved_path, error = resolve_safe_path_in_directory(
                 gifs_root,
                 actual_path,
@@ -1511,19 +1121,15 @@ def open_gif(gif_path, force_refresh=False, config_dir=None):
                 _LOGGER.warning("Built-in asset path validation failed: %s", error)
                 return None
 
-            # Validate and open the image
             return _validate_and_open_image(resolved_path, gif_path, check_size=False)
 
         if gif_path.startswith(("http://", "https://")):
-            # Check cache first (unless force_refresh)
             if _image_cache and not force_refresh:
                 cached_path = _image_cache.get(gif_path)
                 if cached_path:
                     try:
                         gif = Image.open(cached_path)
-                        # Validate cached image
                         if validate_pil_image(gif):
-                            # protect against single frame image like png, jpg
                             if not hasattr(gif, "n_frames"):
                                 gif.n_frames = 1
                             return gif
@@ -1532,7 +1138,6 @@ def open_gif(gif_path, force_refresh=False, config_dir=None):
                                 "Cached GIF failed validation, re-downloading: %s",
                                 gif_path,
                             )
-                            # Delete corrupt cache entry and fall through to download
                             _image_cache.delete(gif_path)
                     except Exception as e:  # noqa: BLE001
                         _LOGGER.warning(
@@ -1540,15 +1145,12 @@ def open_gif(gif_path, force_refresh=False, config_dir=None):
                             gif_path,
                             e,
                         )
-                        # Delete corrupt cache entry and fall through to download
                         _image_cache.delete(gif_path)
 
-            # Validate extension
             if not is_allowed_image_extension(gif_path):
                 _LOGGER.warning("URL has invalid image extension: %s", gif_path)
                 return None
 
-            # Validate URL safety (SSRF protection)
             is_safe, error_msg = validate_url_safety(gif_path)
             if not is_safe:
                 _LOGGER.warning(
@@ -1556,10 +1158,8 @@ def open_gif(gif_path, force_refresh=False, config_dir=None):
                 )
                 return None
 
-            # Download with size limit and timeout
             req = build_browser_request(gif_path)
             with safe_urlopen(req, timeout=DOWNLOAD_TIMEOUT) as response:
-                # Check content-length header
                 content_length = response.headers.get("Content-Length")
                 if content_length and int(content_length) > MAX_IMAGE_SIZE_BYTES:
                     _LOGGER.warning(
@@ -1569,41 +1169,31 @@ def open_gif(gif_path, force_refresh=False, config_dir=None):
                     )
                     return None
 
-                # Read with limit
                 data = response.read(MAX_IMAGE_SIZE_BYTES + 1)
                 if len(data) > MAX_IMAGE_SIZE_BYTES:
                     _LOGGER.warning("Image exceeded size limit during download")
                     return None
 
-                # Get headers for caching
                 etag = response.headers.get("ETag")
                 last_modified = response.headers.get("Last-Modified")
                 content_type = response.headers.get("Content-Type", "image/jpeg")
-                # Normalize content type by stripping parameters
                 content_type = content_type.split(";")[0].strip().lower()
 
                 gif = Image.open(io.BytesIO(data))
 
-                # Validate PIL format and dimensions
                 if not validate_pil_image(gif):
                     _LOGGER.warning("Invalid PIL format or dimensions: %s", gif_path)
                     return None
 
-                # Protect against single frame image like png, jpg
                 if not hasattr(gif, "n_frames"):
                     gif.n_frames = 1
 
-                # Cache the downloaded image
                 if _image_cache:
                     _image_cache.put(gif_path, data, content_type, etag, last_modified)
 
                 return gif
         else:
-            # Local file or user asset
-            # Reject any URL schemes (file://, ftp://, etc.)
-            # Note: http/https and builtin:// are handled in the if branches above
             parsed = urllib.parse.urlparse(gif_path)
-            # Allow single-letter schemes (Windows drive letters like C:)
             if parsed.scheme and len(parsed.scheme) > 1:
                 _LOGGER.warning(
                     "Invalid URL scheme '%s' for local file: %s",
@@ -1612,12 +1202,9 @@ def open_gif(gif_path, force_refresh=False, config_dir=None):
                 )
                 return None
 
-            # If config_dir is provided and path is relative, treat as user asset
             if config_dir and not os.path.isabs(gif_path):
-                # User asset - resolve to config_dir/assets/
                 assets_root = os.path.join(config_dir, "assets")
 
-                # Resolve and validate path
                 is_valid, resolved_path, error = resolve_safe_path_in_directory(
                     assets_root,
                     gif_path,
@@ -1628,11 +1215,9 @@ def open_gif(gif_path, force_refresh=False, config_dir=None):
                     _LOGGER.warning("User asset path validation failed: %s", error)
                     return None
 
-                # Validate and open the image
                 gif = _validate_and_open_image(resolved_path, gif_path, check_size=True)
                 return gif if gif else None
             else:
-                # Legacy: absolute path or no config_dir - use existing validation
                 is_valid, validated_path = validate_local_image_path(gif_path)
                 if not is_valid:
                     _LOGGER.warning(
@@ -1641,7 +1226,6 @@ def open_gif(gif_path, force_refresh=False, config_dir=None):
                     )
                     return None
 
-                # Validate and open the image
                 gif = _validate_and_open_image(
                     validated_path, gif_path, check_size=True
                 )
@@ -1659,38 +1243,14 @@ def open_gif(gif_path, force_refresh=False, config_dir=None):
 
 
 def open_image(image_path, force_refresh=False, config_dir=None):
-    """
-    Open an image from a URL or local file path with file type validation.
-
-    Supports:
-    - URLs: http://, https:// (with caching)
-    - Built-in assets: builtin://path (from LEDFX_ASSETS_PATH/test_images/)
-    - User assets: plain paths like "my_image.png" (from config_dir/assets/) - requires config_dir
-    - Legacy: absolute/relative local file paths (validated within config directory)
-
-    Args:
-        image_path: URL, builtin://path, or plain filename/path to the image
-        force_refresh: Force download from URL, bypassing cache (default False)
-        config_dir: LedFx config directory (required for user assets and local paths)
-
-    Returns:
-        PIL Image object or None if failed
-
-    Examples:
-        "https://example.com/image.png" -> Downloads and caches
-        "builtin://pattern.png" -> Built-in asset from LEDFX_ASSETS_PATH/test_images/
-        "my_image.png" -> User asset from config_dir/assets/my_image.png (when config_dir provided)
-        "subfolder/image.png" -> User asset from config_dir/assets/subfolder/image.png
-    """
+    """Open an image from a URL or local file path with file type validation."""
     image_path = image_path.strip()
 
     try:
-        # Handle builtin:// prefix
         if image_path.startswith("builtin://"):
             actual_path = image_path[10:]  # Remove "builtin://" prefix
             images_root = os.path.join(LEDFX_ASSETS_PATH, "test_images")
 
-            # Resolve and validate path
             is_valid, resolved_path, error = resolve_safe_path_in_directory(
                 images_root,
                 actual_path,
@@ -1701,17 +1261,14 @@ def open_image(image_path, force_refresh=False, config_dir=None):
                 _LOGGER.warning("Built-in image path validation failed: %s", error)
                 return None
 
-            # Validate and open the image
             return _validate_and_open_image(resolved_path, image_path, check_size=False)
 
         if image_path.startswith(("http://", "https://")):
-            # Check cache first (unless force_refresh)
             if _image_cache and not force_refresh:
                 cached_path = _image_cache.get(image_path)
                 if cached_path:
                     try:
                         image = Image.open(cached_path)
-                        # Validate cached image
                         if validate_pil_image(image):
                             return image
                         else:
@@ -1719,7 +1276,6 @@ def open_image(image_path, force_refresh=False, config_dir=None):
                                 "Cached image failed validation, re-downloading: %s",
                                 image_path,
                             )
-                            # Delete corrupt cache entry and fall through to download
                             _image_cache.delete(image_path)
                     except Exception as e:  # noqa: BLE001
                         _LOGGER.warning(
@@ -1727,15 +1283,12 @@ def open_image(image_path, force_refresh=False, config_dir=None):
                             image_path,
                             e,
                         )
-                        # Delete corrupt cache entry and fall through to download
                         _image_cache.delete(image_path)
 
-            # Validate extension
             if not is_allowed_image_extension(image_path):
                 _LOGGER.warning("URL has invalid image extension: %s", image_path)
                 return None
 
-            # Validate URL safety (SSRF protection)
             is_safe, error_msg = validate_url_safety(image_path)
             if not is_safe:
                 _LOGGER.warning(
@@ -1743,10 +1296,8 @@ def open_image(image_path, force_refresh=False, config_dir=None):
                 )
                 return None
 
-            # Download with size limit and timeout
             req = build_browser_request(image_path)
             with safe_urlopen(req, timeout=DOWNLOAD_TIMEOUT) as response:
-                # Check content-length header
                 content_length = response.headers.get("Content-Length")
                 if content_length and int(content_length) > MAX_IMAGE_SIZE_BYTES:
                     _LOGGER.warning(
@@ -1756,27 +1307,22 @@ def open_image(image_path, force_refresh=False, config_dir=None):
                     )
                     return None
 
-                # Read with limit
                 data = response.read(MAX_IMAGE_SIZE_BYTES + 1)
                 if len(data) > MAX_IMAGE_SIZE_BYTES:
                     _LOGGER.warning("Image exceeded size limit during download")
                     return None
 
-                # Get headers for caching
                 etag = response.headers.get("ETag")
                 last_modified = response.headers.get("Last-Modified")
                 content_type = response.headers.get("Content-Type", "image/jpeg")
-                # Normalize content type by stripping parameters
                 content_type = content_type.split(";")[0].strip().lower()
 
                 image = Image.open(io.BytesIO(data))
 
-                # Validate PIL format and dimensions
                 if not validate_pil_image(image):
                     _LOGGER.warning("Invalid PIL format or dimensions: %s", image_path)
                     return None
 
-                # Cache the downloaded image
                 if _image_cache:
                     _image_cache.put(
                         image_path, data, content_type, etag, last_modified
@@ -1784,11 +1330,7 @@ def open_image(image_path, force_refresh=False, config_dir=None):
 
                 return image
         else:
-            # Local file or user asset
-            # Reject any URL schemes (file://, ftp://, etc.)
-            # Note: http/https and builtin:// are handled in the if branches above
             parsed = urllib.parse.urlparse(image_path)
-            # Allow single-letter schemes (Windows drive letters like C:)
             if parsed.scheme and len(parsed.scheme) > 1:
                 _LOGGER.warning(
                     "Invalid URL scheme '%s' for local file: %s",
@@ -1797,12 +1339,9 @@ def open_image(image_path, force_refresh=False, config_dir=None):
                 )
                 return None
 
-            # If config_dir is provided and path is relative, treat as user asset
             if config_dir and not os.path.isabs(image_path):
-                # User asset - resolve to config_dir/assets/
                 assets_root = os.path.join(config_dir, "assets")
 
-                # Resolve and validate path
                 is_valid, resolved_path, error = resolve_safe_path_in_directory(
                     assets_root,
                     image_path,
@@ -1813,13 +1352,11 @@ def open_image(image_path, force_refresh=False, config_dir=None):
                     _LOGGER.warning("User asset path validation failed: %s", error)
                     return None
 
-                # Validate and open the image
                 image = _validate_and_open_image(
                     resolved_path, image_path, check_size=True
                 )
                 return image if image else None
             else:
-                # Legacy: absolute path or no config_dir - use existing validation
                 is_valid, validated_path = validate_local_image_path(image_path)
                 if not is_valid:
                     _LOGGER.warning(
@@ -1828,7 +1365,6 @@ def open_image(image_path, force_refresh=False, config_dir=None):
                     )
                     return None
 
-                # Validate and open the image
                 image = _validate_and_open_image(
                     validated_path, image_path, check_size=True
                 )
@@ -1846,15 +1382,7 @@ def open_image(image_path, force_refresh=False, config_dir=None):
 
 
 def get_mono_font(size):
-    """
-    Get a monospace font from a list of fonts common across platforms
-
-    Args:
-        size: int
-            font size in points
-    Returns:
-        font: ImageFont
-    """
+    """Get a monospace font from a list of fonts common across platforms"""
 
     font_names = [
         "Courier New",
@@ -1872,15 +1400,7 @@ def get_mono_font(size):
 
 
 def get_font(font_list, size):
-    """
-    Get the first font from a list of fonts that is available on the system
-
-    Args:
-        font_list: list
-            list of font name str to try
-        size: int
-            font size in points
-    """
+    """Get the first font from a list of fonts that is available on the system"""
 
     for font_name in font_list:
         try:
@@ -1893,11 +1413,7 @@ def get_font(font_list, size):
 
 
 def generate_default_config(ledfx_effects, effect_id):
-    """
-    Generate config out of the schema for an effect to use as a defualt
-
-    Any manipulations must be made in here, such as expanding gradient strings to fully defined gradients
-    """
+    """Generate config out of the schema for an effect to use as a defualt"""
     config = ledfx_effects.get_class(effect_id).get_combined_default_schema()
     gradient = config.get("gradient", None)
     gradient_str = LEDFX_GRADIENTS.get(gradient, None)
@@ -1908,14 +1424,9 @@ def generate_default_config(ledfx_effects, effect_id):
 
 
 def inject_missing_default_keys(presets, defaults):
-    """Inject missing keys from defaults into presets
-    This happens when static or user presets are defined and there are
-    new keys added to the effect config schema later
-    Args:
-        presets (dict): The current presets.
-        defaults (dict): The current defaults.
-    Returns:
-        dict: The updated presets.
+    """Inject missing keys from defaults into presets This happens when static or
+    user presets are defined and there are new keys added to the effect config
+    schema later Args: presets (dict): The current presets.
     """
     for preset in presets.values():
         default_preset = defaults["reset"]["config"]
@@ -1926,18 +1437,8 @@ def inject_missing_default_keys(presets, defaults):
 
 
 def generate_defaults(ledfx_presets, ledfx_effects, effect_id):
-    """Generate default presets for an effect.
-    appends effect class defaults to presets
-    This is done at run time, as defaults may not reference all effects
-    So we have to just deal with it when used
-
-    Args:
-        ledfx_presets (dict): The current presets.
-        ledfx_effects (dict): The current effects.
-        effect_id (str): The ID of the effect.
-
-    Returns:
-        dict: The default presets for the effect.
+    """Merge current effect defaults into presets when used, after effects are
+    registered.
     """
     if effect_id in ledfx_presets:
         presets = ledfx_presets[effect_id]
@@ -1973,19 +1474,9 @@ def log_packages():
 
 
 def is_package_installed(package_name: str, import_name: str | None = None) -> bool:
-    """
-    Check if a package is available in the environment.
-
-    Args:
-        package_name (str): The name used for pip installation (e.g., 'python-mbedtls').
-        import_name (str): The actual importable module name (e.g., 'mbedtls').
-
-    Returns:
-        bool: True if the package is importable, False otherwise.
-    """
+    """Check if a package is available in the environment."""
     import_name = import_name or package_name
 
-    # Try to get import spec
     spec = importlib.util.find_spec(import_name)
     if spec is None:
         _LOGGER.debug(
@@ -1995,7 +1486,6 @@ def is_package_installed(package_name: str, import_name: str | None = None) -> b
         )
         return False
 
-    # Try to get version info
     try:
         version = metadata.version(package_name)
     except metadata.PackageNotFoundError:
@@ -2012,22 +1502,19 @@ def is_package_installed(package_name: str, import_name: str | None = None) -> b
 
 
 def check_optional_dependencies():
-    """
-    Check for optional dependencies and log their availability, versions, and paths.
+    """Check for optional dependencies and log their availability, versions, and
+    paths.
     """
     OPTIONAL_DEPENDENCIES = {
         "psutil": "psutil",
         "python-mbedtls": "mbedtls",
-        # Add more if needed
     }
     for package_name, import_name in OPTIONAL_DEPENDENCIES.items():
         is_package_installed(package_name, import_name)
 
 
 class PerformanceAnalysis:
-    """
-    A class for comparing the performance of two functions.
-    """
+    """A class for comparing the performance of two functions."""
 
     _write_buffer: ClassVar[list[list]] = []
     _write_buffer_limit = 100
@@ -2038,22 +1525,8 @@ class PerformanceAnalysis:
         optimized_function: Callable,
         num_runs: int = 1,
     ):
-        """
-        Compare the execution time of two functions.
-
-        To use, import the PerformanceAnalysis using "from ledfx.utils import PerformanceAnalysis"
-        and then call PerformanceAnalysis.compare_functions(lambda: original_function(function arguments), lambda: optimized_function(function_arguments), num_runs).
-
-        For example:
-        PerformanceAnalysis.compare_functions(lambda: fill_rainbow(self.pixels, self._hue, hue_delta),lambda: fill_rainbow_slow(self.pixels, self._hue, hue_delta))
-
-        Parameters:
-        original_function (Callable): The original function to be compared, wrapped in lambda to prevent it from being executed immediately.
-        optimized_function (Callable): The optimized function to be compared, wrapped in lambda to prevent it from being executed immediately.
-        num_runs (int, optional): The number of times each function should be run. Defaults to 1, since we usually use this inside loops.
-
-        Returns:
-        None
+        """Compare zero-argument callables over num_runs; wrap parameterized calls in
+        lambdas.
         """
         original_time = PerformanceAnalysis._timer_wrapper(original_function, num_runs)
         optimized_time = PerformanceAnalysis._timer_wrapper(
@@ -2077,17 +1550,7 @@ class PerformanceAnalysis:
 
     @staticmethod
     def _timer_wrapper(func: Callable, num_runs: int) -> float:
-        """
-        Time a function over a number of runs.
-
-        Args:
-            func (Callable): The function to be timed.
-            num_runs (int): The number of times to run the function.
-
-        Returns:
-            float: The average time taken to run the function.
-
-        """
+        """Time a function over a number of runs."""
         start_time = time.perf_counter()
         for _ in range(num_runs):
             func()
@@ -2103,15 +1566,8 @@ class PerformanceAnalysis:
         optimized_time: float,
         percent_faster: float,
     ):
-        """
-        Write the function comparison results to a CSV file - buffer 100 rows before writing to file to minimize disk writes and performance impact.
-
-        Parameters:
-        - num_runs (int): The number of runs performed for the function comparison.
-        - faster_method (str): The name of the faster method being compared.
-        - original_time (float): The execution time of the original method.
-        - optimized_time (float): The execution time of the optimized method.
-        - percent_faster (float): The percentage improvement in execution time of the optimized method compared to the original method.
+        """Write the function comparison results to a CSV file - buffer 100 rows
+        before writing to file to minimize disk writes and performance impact.
         """
         timestamp = (
             datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S.%f")
@@ -2198,22 +1654,17 @@ class UpdateChecker:
         )
 
 
-# pre stuff this to prevent per frame
 log_256 = np.log(256)
 
 
 def pixels_boost(pixels, compression_factor, max_floor):
-    # Compute the new floor based on the compression factor
     floor = max_floor * compression_factor
 
-    # Precompute constants and reduce repeated computations
     factor = 255 - floor
     blend_factor = 1 - compression_factor
 
-    # Logarithmic compression: map pixel_array from [0, 255] to [floor, 255]
     log_compressed = floor + (np.log1p(pixels) / log_256) * factor
 
-    # Apply the blend only where pixels are greater than 1, else leave unchanged
     boosted = np.where(
         pixels > 1,
         blend_factor * pixels + compression_factor * log_compressed,
@@ -2224,82 +1675,40 @@ def pixels_boost(pixels, compression_factor, max_floor):
 
 
 def dump_pixels(pixels, shape):
-    """
-    Dump a RGB pixels np array into a PIL image and launch a window to display it.
+    """Dump a RGB pixels np array into a PIL image and launch a window to display it.
     This is for adhoc debug only
-
-    Parameters:
-    - pixels: 1D array of concatenated RGB pixel values
-    - shape: tuple, the desired shape of the 2D image (height, width)
-
-    Returns:
-    - none
     """
 
-    # Reshape the 1D pixel array into (height, width, 3) for RGB
     reshaped_pixels = pixels.reshape((shape[0], shape[1], 3))
-    # Convert the numpy array back into a Pillow image
     image = Image.fromarray(reshaped_pixels.astype(np.uint8), "RGB")
 
     image.show()
 
 
 def resize_pixels(pixels, old_shape, new_shape):
+    """Resizes a 1D pixel array that represents a for 1D or 2D image by interpolating
+    it in 2D space using PIL.
     """
-    Resizes a 1D pixel array that represents a for 1D or 2D image by interpolating it in 2D space using PIL.
-
-    Profiled as at least as good as or better than interpolate_pixels() for performance even with the overhead of creating a PIL image.
-
-    Parameters:
-    - pixels: 1D array of concatenated RGB pixel values
-    - old_shape: tuple, the original shape of the 2D image (height, width)
-    - new_shape: tuple, the desired shape of the resized 2D image (height, width)
-
-    Returns:
-    - A resized 1D pixel array
-    """
-    # Reshape the 1D array into a 2D image (height, width, 3)
     pixel_matrix = pixels.reshape((old_shape[0], old_shape[1], 3)).astype(np.uint8)
 
-    # Create a PIL image from the pixel data
     image = Image.fromarray(pixel_matrix)
 
-    # Resize the image using PIL (bilinear interpolation is default)
     resized_image = image.resize((new_shape[1], new_shape[0]), Image.BILINEAR)
 
-    # Convert the resized image back to a numpy array
     resized_pixel_matrix = np.array(resized_image)
 
-    # Flatten the resized pixel matrix back to 1D
     return resized_pixel_matrix.reshape(-1, 3)
 
 
 def shape_to_fit_len(max_len, shape, pixels_len):
-    """Converts the shape of a visualisation to obey constraints
-       The max_len pixels which is a system variable a user can change
-       Additionally a max dimension of 64 in rows or columns is enforced
-       As the shape has already been reduced to max pixels, both CANNOT
-       be greate than 64
-
-    Args:
-        max_len : The maximum number of pixels allowed in the final visualisation
-        shape : The current shape of the visualisation before resizing
-        pixels_len : The number of pixels in the current visualisation
-
-    Returns:
-        new_shape : The shape calculated to use in resizing
-        pixels_len : The number of pixels implied in the new_shape
-    """
+    """Fit visualization to max_len pixels with each dimension at most 64."""
 
     if shape[0] > 1:
-        # this is a 2d visualisation
         pixels_len = shape[0] * shape[1]
         reduction_ratio = math.sqrt(pixels_len / max_len)
         new_rows = shape[0] / reduction_ratio
         new_cols = shape[1] / reduction_ratio
 
-        # protect against extreme shapes
-        # see function description for magic number 64
         if new_rows > 64:
             reduction_ratio = 64 / new_rows
             new_rows = 64
@@ -2309,7 +1718,6 @@ def shape_to_fit_len(max_len, shape, pixels_len):
             new_cols = 64
             new_rows = new_rows * reduction_ratio
 
-        # protect from less than 1 values
         if new_rows < 1.0:
             new_shape = (1, new_cols)
         elif new_cols < 1.0:
@@ -2320,33 +1728,19 @@ def shape_to_fit_len(max_len, shape, pixels_len):
                 int(new_cols),
             )
     else:
-        # this is a 1d visualisation
-        # pixels_len will be unchanged
         new_shape = (1, max_len)
 
     return new_shape, pixels_len
 
 
 class Teleplot:
-    """
-    Helper class for the use of vscode Teleplot extension
+    """Send diagnostic values to the VS Code Teleplot UDP listener."""
 
-    import and inline call
-    Teleplot.send("variable_name:value")
-    """
-
-    # only one socket for all instances
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     @staticmethod
     def send(string):
-        """Send string to teleplot
-
-        https://github.com/nesnes/teleplot
-
-        Args:
-            string: The string carrying the teleplot data of the format as per link above
-        """
+        """Send string to teleplot"""
 
         try:
             Teleplot.sock.sendto(string.encode(), ("127.0.0.1", 47269))
@@ -2355,43 +1749,21 @@ class Teleplot:
 
 
 def aggressive_top_end_bias(x, boost):
-    """
-    Apply an aggressive top-end bias to input values.
-
-    This function blends between a linear curve and a non-linear curve that
-    pulls higher values closer to 1.0 as boost increases.
-
-    - At boost = 0: the output is equal to the input (linear).
-    - At boost = 1: higher input values are strongly biased toward 1.0.
-
-    The transformation is applied element-wise if `x` is a NumPy array.
-
-    Parameters:
-        x (float or np.ndarray): Input value(s) between 0 and 1.
-        boost (float): Boost factor between 0 and 1.
-
-    Returns:
-        float or np.ndarray: Transformed value(s), same shape and type as `x`.
-    """
+    """Apply an aggressive top-end bias to input values."""
 
     aggressive_curve = 1 - (1 - x) ** 4  # Adjust power for curve steepness
     return (1 - boost) * x + boost * aggressive_curve
 
 
 def get_sorted_physical_ips() -> list[str]:
-    """
-    Returns a sorted list of local non-loopback IPv4 addresses from physical interfaces.
-    Sorts by:
-        1. Primary outbound IP (used for external connections)
-        2. Interface activity (bytes sent + received)
-    Logs interface decisions and IPs for triage.
+    """Returns a sorted list of local non-loopback IPv4 addresses from physical
+    interfaces.
     """
     try:
         import psutil
 
         ip_usage_list = []
 
-        # Heuristics for physical interfaces
         physical_keywords = [
             "eth",
             "en",
@@ -2453,7 +1825,6 @@ def get_sorted_physical_ips() -> list[str]:
     ip_usage_list.sort(reverse=True)
     sorted_ips = [ip for _, ip in ip_usage_list]
 
-    # Try to determine the primary IP based on routing
     primary_ip = get_primary_ip()
 
     if primary_ip is not None:
@@ -2466,9 +1837,8 @@ def get_sorted_physical_ips() -> list[str]:
 
 
 def get_primary_ip() -> str:
-    """
-    Returns the primary local IPv4 address used for outbound traffic.
-    This works across Windows, macOS, Linux, and Android (Termux, etc.).
+    """Returns the primary local IPv4 address used for outbound traffic. This works
+    across Windows, macOS, Linux, and Android (Termux, etc.).
     """
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -2484,17 +1854,5 @@ def get_primary_ip() -> str:
 
 
 def nonlinear_log(x, power=3):
-    """
-    Apply a nonlinear logarithmic transformation to the input value(s).
-    This function applies a transformation that is similar to a logarithm but
-    allows for a customizable power to control the steepness of the curve.
-    - At power = 1: the output is equal to the input (linear).
-    - At power > 1: higher input values are pulled closer to 1.0.
-    The transformation is applied element-wise if `x` is a NumPy array.
-    Parameters:
-        x (float or np.ndarray): Input value(s) between 0 and 1.
-        power (float): Power factor to control the steepness of the curve.
-    Returns:
-        float or np.ndarray: Transformed value(s), same shape and type as `x`.
-    """
+    """Apply a nonlinear logarithmic transformation to the input value(s)."""
     return np.sign(x) * (abs(x) ** power)

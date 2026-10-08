@@ -12,17 +12,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class NowPlayingEndpoint(RestEndpoint):
-    """REST endpoint for Now Playing state and configuration.
-
-    GET /api/now-playing
-        Returns the current Now Playing state including metadata,
-        artwork reference, gradient information, and full configuration.
-
-    PUT /api/now-playing
-        Updates Now Playing configuration (gradient, track_text, album_art).
-        Accepts a partial or full configuration dict; unspecified sections
-        retain their current values.
-    """
+    """REST endpoint for Now Playing state and configuration."""
 
     ENDPOINT_PATH = "/api/now-playing"
 

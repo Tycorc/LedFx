@@ -7,7 +7,6 @@ from ledfx.utils import async_fire_and_forget, set_name_to_icon
 
 
 def handle_exception(future):
-    # Ignore exceptions, these will be raised when a device is found that already exists
     future.exception()
 
 
@@ -17,21 +16,12 @@ class FindDevicesEndpoint(RestEndpoint):
     ENDPOINT_PATH = "/api/find_devices"
 
     async def post(self, request: web.Request) -> web.Response:
-        """
-        Find and add all WLED devices on the LAN.
-
-        Args:
-            request (web.Request): The request object containing the `name_to_icon` dict.
-
-        Returns:
-            A web.Response object indicating the success of the request.
-        """
+        """Find and add all WLED devices on the LAN."""
         try:
             data = await request.json()
         except JSONDecodeError:
             return await self.json_decode_error()
 
-        # TODO: Pull this out of find_devices - not sure why it's here or what's using it.
         name_to_icon = data.get("name_to_icon")
 
         if name_to_icon is None:
@@ -48,12 +38,7 @@ class FindDevicesEndpoint(RestEndpoint):
         return await self.request_success()
 
     async def get(self) -> web.Response:
-        """Handle HTTP GET requests.
-
-        This method is responsible for handling HTTP GET requests.
-        Returns:
-            web.Response: The response object indicating the success of the request.
-        """
+        """Handle HTTP GET requests."""
         async_fire_and_forget(
             self._ledfx.zeroconf.discover_wled_devices(),
             loop=self._ledfx.loop,
